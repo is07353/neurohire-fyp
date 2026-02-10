@@ -1,0 +1,16 @@
+# Node / React
+node_modules/
+dist/
+.vite/
+
+# Python
+__pycache__/
+*.pyc
+.env
+
+# OS / editor
+.vscode/
+.DS_Store
+
+# Logs
+*.log
