@@ -1,0 +1,151 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model admins {
+  admin_id      Int          @id @default(autoincrement())
+  full_name     String
+  email         String       @unique
+  password_hash String
+  created_at    DateTime     @default(now())
+  error_logs    error_logs[]
+}
+
+model ai_assessments {
+  assessment_id          Int                    @id @default(autoincrement())
+  application_id         Int                    @unique
+  total_score            Int?
+  ai_recommendation      String?
+  reason_summary         String?
+  candidate_applications candidate_applications @relation(fields: [application_id], references: [application_id], onDelete: Cascade)
+}
+
+model candidate_applications {
+  application_id      Int                  @id @default(autoincrement())
+  candidate_id        Int
+  job_id              Int
+  status              String               @default("pending")
+  tag_needs_review    Boolean              @default(false)
+  created_at          DateTime             @default(now())
+  ai_assessments      ai_assessments?
+  candidates          candidates           @relation(fields: [candidate_id], references: [candidate_id], onDelete: Cascade)
+  jobs                jobs                 @relation(fields: [job_id], references: [job_id], onDelete: Cascade)
+  cv_data             cv_data?
+  recruiter_decisions recruiter_decisions?
+  video_submissions   video_submissions?
+}
+
+model candidate_logs {
+  log_id       Int        @id @default(autoincrement())
+  candidate_id Int
+  action       String
+  timestamp    DateTime   @default(now())
+  candidates   candidates @relation(fields: [candidate_id], references: [candidate_id], onDelete: Cascade)
+}
+
+model candidates {
+  candidate_id           Int                      @id @default(autoincrement())
+  full_name              String?
+  email                  String?
+  phone                  String?
+  created_at             DateTime                 @default(now())
+  address                String?
+  candidate_applications candidate_applications[]
+  candidate_logs         candidate_logs[]
+}
+
+model cv_data {
+  cv_id                  Int                    @id @default(autoincrement())
+  application_id         Int                    @unique
+  cv_text                String
+  parsed_keywords        String
+  technical_score        Int?
+  cv_pdf                 Bytes?
+  candidate_applications candidate_applications @relation(fields: [application_id], references: [application_id], onDelete: Cascade)
+}
+
+model error_logs {
+  error_id      Int       @id @default(autoincrement())
+  admin_id      Int?
+  error_message String
+  error_type    String
+  status        String    @default("open")
+  resolved_at   DateTime?
+  created_at    DateTime  @default(now())
+  admins        admins?   @relation(fields: [admin_id], references: [admin_id])
+}
+
+model job_questions {
+  question_id   Int      @id @default(autoincrement())
+  job_id        Int
+  question_text String
+  created_at    DateTime @default(now())
+  jobs          jobs     @relation(fields: [job_id], references: [job_id], onDelete: Cascade)
+}
+
+model jobs {
+  job_id                 Int                      @id @default(autoincrement())
+  recruiter_id           Int
+  job_title              String
+  job_description        String
+  created_at             DateTime                 @default(now())
+  eligibility_text       String?
+  status                 String                   @default("open")
+  candidate_applications candidate_applications[]
+  job_questions          job_questions[]
+  recruiters             recruiters               @relation(fields: [recruiter_id], references: [recruiter_id], onDelete: Cascade)
+}
+
+model recruiter_decisions {
+  decision_id            Int                    @id @default(autoincrement())
+  application_id         Int                    @unique
+  recruiter_id           Int
+  final_decision         String?
+  overrode_ai            Boolean                @default(false)
+  comments               String?
+  decision_date          DateTime               @default(now())
+  candidate_applications candidate_applications @relation(fields: [application_id], references: [application_id], onDelete: Cascade)
+  recruiters             recruiters             @relation(fields: [recruiter_id], references: [recruiter_id], onDelete: Cascade)
+}
+
+model recruiter_logs {
+  log_id       Int        @id @default(autoincrement())
+  recruiter_id Int
+  action       String
+  timestamp    DateTime   @default(now())
+  recruiters   recruiters @relation(fields: [recruiter_id], references: [recruiter_id], onDelete: Cascade)
+}
+
+model recruiters {
+  recruiter_id        Int                   @id @default(autoincrement())
+  full_name           String
+  email               String                @unique
+  password_hash       String
+  role                String                @default("recruiter")
+  created_at          DateTime              @default(now())
+  jobs                jobs[]
+  recruiter_decisions recruiter_decisions[]
+  recruiter_logs      recruiter_logs[]
+}
+
+model system_settings {
+  setting_id    Int      @id @default(autoincrement())
+  setting_key   String   @unique
+  setting_value String
+  updated_at    DateTime
+}
+
+model video_submissions {
+  video_id               Int                    @id @default(autoincrement())
+  application_id         Int                    @unique
+  video_path             String
+  audio_transcript       String?
+  video_score            Int?
+  quality_flag           String?
+  candidate_applications candidate_applications @relation(fields: [application_id], references: [application_id], onDelete: Cascade)
+}
