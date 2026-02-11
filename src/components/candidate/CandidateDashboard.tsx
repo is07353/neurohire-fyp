@@ -9,6 +9,10 @@ import { SubmissionComplete } from '../SubmissionComplete';
 import { ProgressIndicator } from '../ProgressIndicator';
 import { ArrowLeft } from 'lucide-react';
 
+const API_BASE =
+  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
+  'http://127.0.0.1:8000';
+
 export type Language = 'english' | 'urdu' | null;
 
 export interface Job {
@@ -58,10 +62,26 @@ export function CandidateDashboard({ onBackToLanding }: CandidateDashboardProps)
     setSelectedJob(job);
   };
 
-  const handleJobContinue = () => {
-    if (selectedJob) {
-      setCurrentStep(3);
+  const handleJobContinue = async () => {
+    if (!selectedJob) return;
+    try {
+      const payload = {
+        job_id: selectedJob.id,
+        title: selectedJob.title,
+        location: selectedJob.location,
+        company_name: (selectedJob as { companyName?: string }).companyName ?? undefined,
+        branch_name: (selectedJob as { branchName?: string }).branchName ?? undefined,
+        job_description: (selectedJob as { jobDescription?: string }).jobDescription ?? undefined,
+      };
+      await fetch(`${API_BASE}/candidate/selected-job`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch (_err) {
+      // Continue to next step even if backend call fails (e.g. offline)
     }
+    setCurrentStep(3);
   };
 
   const handleCVUpload = (file: File) => {

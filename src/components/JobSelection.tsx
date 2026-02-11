@@ -24,6 +24,7 @@ interface ExtendedJob extends Job {
   workMode: string[];
   salary: number;
   otherRequirements: string;
+  jobDescription?: string;
 }
 
 /** Map API job shape to ExtendedJob (workMode: display as title-case e.g. Onsite/Remote) */
@@ -45,6 +46,7 @@ function mapApiJobToExtended(api: Record<string, unknown>): ExtendedJob {
     workMode: workMode.map((m) => (m === 'REMOTE' ? 'Remote' : m === 'ONSITE' ? 'Onsite' : m)),
     salary: Number(api.salary ?? 0),
     otherRequirements: String(api.otherRequirements ?? ''),
+    jobDescription: String(api.job_description ?? ''),
   };
 }
 

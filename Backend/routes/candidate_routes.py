@@ -1,10 +1,24 @@
 """API endpoints for candidate flow and health."""
 import asyncpg
 from fastapi import APIRouter, Request, Depends
+from pydantic import BaseModel
 
 from repositories import candidate_repo, job_repo
 
 router = APIRouter()
+
+# In-memory store for the job selected by the candidate (e.g. for this session/flow).
+# Key: optional session_id, value: selected job payload. Use "" as default key when no session.
+_candidate_selected_job: dict[str, dict] = {}
+
+
+class SelectedJobPayload(BaseModel):
+    job_id: str
+    title: str | None = None
+    location: str | None = None
+    company_name: str | None = None
+    branch_name: str | None = None
+    job_description: str | None = None
 
 
 async def get_db_pool(request: Request) -> asyncpg.Pool:
@@ -46,3 +60,23 @@ def candidate_overview():
         "email": "ali@example.com",
         "address": "Karachi, Pakistan",
     }
+
+
+@router.post("/candidate/selected-job")
+def set_candidate_selected_job(payload: SelectedJobPayload, session_id: str = ""):
+    """Store the job selected by the candidate. Optional session_id for multi-session support."""
+    key = session_id or "default"
+    _candidate_selected_job[key] = payload.model_dump()
+    print("[Candidate selected job]", payload.model_dump())
+    # here we can get jd for cvjd model
+    return {"ok": True, "job_id": payload.job_id}
+
+
+@router.get("/candidate/selected-job")
+def get_candidate_selected_job(session_id: str = ""):
+    """Return the job currently stored as selected by the candidate, if any."""
+    key = session_id or "default"
+    data = _candidate_selected_job.get(key)
+    if not data:
+        return {"selected_job": None}
+    return {"selected_job": data}
