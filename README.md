@@ -1,4 +1,10 @@
 
+  #python -m uvicorn main:app --reload --port 8000
+  #npm run uploadthing-server
+  # npm run dev
+ DATABASE_URL=postgresql://neondb_owner:npg_7Yzfsr8QoSkI@ep-raspy-bar-a1doe4s3-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+ UPLOADTHING_TOKEN='eyJhcGlLZXkiOiJza19saXZlXzc5ZWVhMmFkZTg1MmZjNjMwYjI3OTlkY2RlYWFkNzc0NWZlZTM4ZTY0N2Y1OGViNTRkNTg1MDM5NTRkNGJhMzYiLCJhcHBJZCI6Inpqd3RkNzllcTIiLCJyZWdpb25zIjpbInNlYTEiXX0='
+
   # NeuroHire – Frontend, Backend & DB Setup
 
   This project contains a React (Vite) frontend, a FastAPI backend, and a Neon PostgreSQL database.  

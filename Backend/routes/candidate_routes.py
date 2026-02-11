@@ -21,6 +21,12 @@ class SelectedJobPayload(BaseModel):
     job_description: str | None = None
 
 
+class CVUrlPayload(BaseModel):
+    """Payload carrying the public URL of an uploaded CV."""
+
+    file_url: str
+
+
 async def get_db_pool(request: Request) -> asyncpg.Pool:
     return request.app.state.db_pool
 
@@ -80,3 +86,11 @@ def get_candidate_selected_job(session_id: str = ""):
     if not data:
         return {"selected_job": None}
     return {"selected_job": data}
+
+
+@router.post("/candidate/cv-url")
+def receive_cv_url(payload: CVUrlPayload):
+    """Receive the uploaded CV URL from the frontend and print it."""
+    print("[Candidate CV URL]", payload.file_url)
+    # In future you can store this in DB or trigger processing here
+    return {"ok": True}
