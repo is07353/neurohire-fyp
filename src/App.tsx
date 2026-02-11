@@ -39,6 +39,8 @@ export interface Job {
   cvWeight: number;
   videoWeight: number;
   status: 'open' | 'closed';
+  companyName?: string;
+  branchName?: string;
 }
 
 export interface Applicant {

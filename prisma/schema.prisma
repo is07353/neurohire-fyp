@@ -3,8 +3,18 @@ generator client {
   output   = "../src/generated/prisma"
 }
 
+// Connection URL is in prisma.config.ts (Prisma 7+)
 datasource db {
   provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum WorkMode {
+  ONSITE
+  REMOTE
 }
 
 model admins {
@@ -80,6 +90,8 @@ model error_logs {
   admins        admins?   @relation(fields: [admin_id], references: [admin_id])
 }
 
+// Job-specific video interview questions (cascade delete when job is deleted).
+// Relation on jobs is named video_questions for clarity.
 model job_questions {
   question_id   Int      @id @default(autoincrement())
   job_id        Int
@@ -92,13 +104,28 @@ model jobs {
   job_id                 Int                      @id @default(autoincrement())
   recruiter_id           Int
   job_title              String
+  company_name           String                   @default("")
+  branch_name            String                   @default("")
   job_description        String
   created_at             DateTime                 @default(now())
+  updated_at             DateTime                 @default(now()) @updatedAt
   eligibility_text       String?
   status                 String                   @default("open")
+
+  // New job-detail fields (defaults for backward compatibility with existing rows)
+  skills                   String[]               @default([]) // multiple skills (PostgreSQL array)
+  minimum_experience_years Int                    @default(0)  // must be >= 0 (enforce in app)
+  other_requirements       String?
+  location                 String                 @default("")
+  work_mode                WorkMode              @default(REMOTE)
+  salary_monthly_pkr       Int                    @default(0)  // must be > 0 for new jobs (enforce in app)
+  // CV and Video weightage are percentage parts that must sum to 100 (e.g. 75% + 25% = 100%). Enforced by DB CHECK and API validation.
+  cv_score_weightage       Int                    @default(50)
+  video_score_weightage    Int                    @default(50)
+
   candidate_applications candidate_applications[]
-  job_questions          job_questions[]
-  recruiters             recruiters               @relation(fields: [recruiter_id], references: [recruiter_id], onDelete: Cascade)
+  video_questions       job_questions[]          // job-specific video questions
+  recruiters            recruiters               @relation(fields: [recruiter_id], references: [recruiter_id], onDelete: Cascade)
 }
 
 model recruiter_decisions {

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ArrowLeft, ChevronDown, X, Plus, Trash2 } from 'lucide-react';
 import neurohireLogo from '@/assets/neurohire-logo.png';
+import type { Job } from '../../App';
 
 interface EditJobProps {
   job: Job;
@@ -10,7 +11,9 @@ interface EditJobProps {
 }
 
 export function EditJob({ job, recruiterName, onBack, onLogout }: EditJobProps) {
-  const [title, setTitle] = useState('');
+  const [title, setTitle] = useState(job.title);
+  const [companyName, setCompanyName] = useState((job as { companyName?: string }).companyName ?? '');
+  const [branchName, setBranchName] = useState((job as { branchName?: string }).branchName ?? '');
   const [location, setLocation] = useState(job.location);
   const [skills, setSkills] = useState<string[]>(['Customer Handling', 'Inventory']);
   const [skillInput, setSkillInput] = useState('');
@@ -83,7 +86,7 @@ export function EditJob({ job, recruiterName, onBack, onLogout }: EditJobProps) 
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Updated job:', { title, location, questions, cvWeight, videoWeight });
+    console.log('Updated job:', { title, companyName, branchName, location, questions, cvWeight, videoWeight });
     onBack();
   };
 
@@ -161,6 +164,34 @@ export function EditJob({ job, recruiterName, onBack, onLogout }: EditJobProps) 
                   onChange={(e) => setTitle(e.target.value)}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-[#000000] transition-colors"
                   placeholder="Who would you like to hire today?"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Company Name
+                </label>
+                <input
+                  type="text"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-[#000000] transition-colors"
+                  placeholder="e.g. RetailCo Pakistan"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Branch Name
+                </label>
+                <input
+                  type="text"
+                  value={branchName}
+                  onChange={(e) => setBranchName(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-[#000000] transition-colors"
+                  placeholder="e.g. Gulberg Branch"
                   required
                 />
               </div>

@@ -1,6 +1,12 @@
-import { Language, Job } from '../App';
-import { Briefcase, MapPin, Clock, Search, ChevronDown, ChevronUp } from 'lucide-react';
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import type { Job } from '../App';
+import { MapPin, Search, ChevronDown, ChevronUp } from 'lucide-react';
+
+type Language = 'english' | 'urdu' | null;
+
+const API_BASE =
+  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
+  'http://127.0.0.1:8000';
 
 interface JobSelectionProps {
   language: Language;
@@ -10,6 +16,9 @@ interface JobSelectionProps {
 }
 
 interface ExtendedJob extends Job {
+  type?: string;
+  companyName?: string;
+  branchName?: string;
   minExperience: number;
   skills: string[];
   workMode: string[];
@@ -17,63 +26,27 @@ interface ExtendedJob extends Job {
   otherRequirements: string;
 }
 
-const jobsData: ExtendedJob[] = [
-  {
-    id: '1',
-    title: 'Store Worker',
-    location: 'Gulberg, Lahore',
-    type: 'Full-time',
-    minExperience: 1,
-    skills: ['Customer Handling', 'Inventory', 'Stock Management'],
-    workMode: ['Onsite'],
-    salary: 35000,
-    otherRequirements: 'Must be able to stand for long periods. Basic Urdu and English communication required. Must be comfortable working in shifts including weekends. Physical fitness required for handling inventory.',
-  },
-  {
-    id: '2',
-    title: 'Cashier',
-    location: 'DHA, Karachi',
-    type: 'Full-time',
-    minExperience: 0,
-    skills: ['Cash Handling', 'Customer Service', 'POS Systems'],
-    workMode: ['Onsite'],
-    salary: 32000,
-    otherRequirements: 'Basic mathematics skills required. Must be honest and trustworthy. Previous cash handling experience preferred but not required. Comfortable working in a fast-paced environment.',
-  },
-  {
-    id: '3',
-    title: 'Delivery Rider',
-    location: 'F-7, Islamabad',
-    type: 'Part-time',
-    minExperience: 0,
-    skills: ['Delivery', 'Navigation', 'Customer Handling'],
-    workMode: ['Onsite'],
-    salary: 25000,
-    otherRequirements: 'Valid motorcycle license required. Must own or have access to a reliable motorcycle. Knowledge of Islamabad routes. Mobile phone with internet connection required. Weather-resistant and punctual.',
-  },
-  {
-    id: '4',
-    title: 'Store Worker',
-    location: 'Saddar, Rawalpindi',
-    type: 'Full-time',
-    minExperience: 2,
-    skills: ['Customer Handling', 'Inventory', 'Stock Management'],
-    workMode: ['Onsite'],
-    salary: 38000,
-    otherRequirements: 'Minimum 2 years retail experience required. Team leadership skills preferred. Ability to train new staff members. Strong organizational and communication skills.',
-  },
-  {
-    id: '5',
-    title: 'Customer Service Representative',
-    location: 'Johar Town, Lahore',
-    type: 'Full-time',
-    minExperience: 1,
-    skills: ['Customer Service', 'Communication', 'Problem Solving'],
-    workMode: ['Remote'],
-    salary: 40000,
-    otherRequirements: 'Excellent Urdu and English communication skills. Computer literacy required. Reliable internet connection and quiet workspace at home. Customer service experience in retail or call center preferred.',
-  },
-];
+/** Map API job shape to ExtendedJob (workMode: display as title-case e.g. Onsite/Remote) */
+function mapApiJobToExtended(api: Record<string, unknown>): ExtendedJob {
+  const workMode = (api.workMode as string[]) ?? [];
+  return {
+    id: String(api.id ?? ''),
+    title: String(api.title ?? ''),
+    location: String(api.location ?? ''),
+    companyName: String(api.company_name ?? ''),
+    branchName: String(api.branch_name ?? ''),
+    applicantCount: 0,
+    cvWeight: Number(api.cv_score_weightage ?? 50),
+    videoWeight: Number(api.video_score_weightage ?? 50),
+    status: (api.status === 'closed' ? 'closed' : 'open') as 'open' | 'closed',
+    type: String(api.type ?? 'Full-time'),
+    minExperience: Number(api.minExperience ?? 0),
+    skills: Array.isArray(api.skills) ? (api.skills as string[]) : [],
+    workMode: workMode.map((m) => (m === 'REMOTE' ? 'Remote' : m === 'ONSITE' ? 'Onsite' : m)),
+    salary: Number(api.salary ?? 0),
+    otherRequirements: String(api.otherRequirements ?? ''),
+  };
+}
 
 const translations = {
   english: {
@@ -112,9 +85,37 @@ export function JobSelection({ language, selectedJob, onJobSelect, onContinue }:
   const t = translations[language || 'english'];
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
+  const [jobs, setJobs] = useState<ExtendedJob[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    fetch(`${API_BASE}/candidate/jobs`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`Failed to load jobs: ${res.status}`);
+        return res.json();
+      })
+      .then((data: unknown[]) => {
+        if (!cancelled && Array.isArray(data)) {
+          setJobs(data.map((item) => mapApiJobToExtended(item as Record<string, unknown>)));
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load jobs');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Filter jobs based on search query
-  const filteredJobs = jobsData.filter(job => 
+  const filteredJobs = jobs.filter(job => 
     job.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -142,8 +143,22 @@ export function JobSelection({ language, selectedJob, onJobSelect, onContinue }:
           />
         </div>
       </div>
+
+      {/* Loading / Error */}
+      {loading && (
+        <div className="text-center py-12 text-gray-500">
+          <p className="text-xl">Loading jobs…</p>
+        </div>
+      )}
+      {error && !loading && (
+        <div className="text-center py-12 text-red-600">
+          <p className="text-xl">{error}</p>
+          <p className="text-sm mt-2">Ensure the backend is running at {API_BASE}</p>
+        </div>
+      )}
       
       {/* Job Cards */}
+      {!loading && !error && (
       <div className="space-y-6 mb-12">
         {filteredJobs.map((job) => (
           <div
@@ -159,6 +174,12 @@ export function JobSelection({ language, selectedJob, onJobSelect, onContinue }:
               <div className="flex-1 space-y-4">
                 {/* Job Title */}
                 <h2 className="text-2xl font-bold text-[#000000]">{job.title}</h2>
+                {/* Company name and branch name below title */}
+                {(job.companyName || job.branchName) && (
+                  <p className="text-base text-gray-600">
+                    {[job.companyName, job.branchName].filter(Boolean).join(' · ')}
+                  </p>
+                )}
                 
                 {/* Minimum Experience */}
                 <div className="text-base text-gray-700">
@@ -247,6 +268,7 @@ export function JobSelection({ language, selectedJob, onJobSelect, onContinue }:
           </div>
         )}
       </div>
+      )}
       
       {/* Continue Button */}
       <button

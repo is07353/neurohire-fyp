@@ -10,6 +10,8 @@ interface AddJobProps {
 
 export function AddJob({ recruiterName, onBack, onLogout }: AddJobProps) {
   const [title, setTitle] = useState('');
+  const [companyName, setCompanyName] = useState('');
+  const [branchName, setBranchName] = useState('');
   const [location, setLocation] = useState('');
   const [skills, setSkills] = useState<string[]>([]);
   const [skillInput, setSkillInput] = useState('');
@@ -82,7 +84,7 @@ export function AddJob({ recruiterName, onBack, onLogout }: AddJobProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('New job:', { title, location, skills, minExperience, otherRequirements, workMode, salary, questions, cvWeight, videoWeight });
+    console.log('New job:', { title, companyName, branchName, location, skills, minExperience, otherRequirements, workMode, salary, questions, cvWeight, videoWeight });
     onBack();
   };
 
@@ -160,6 +162,34 @@ export function AddJob({ recruiterName, onBack, onLogout }: AddJobProps) {
                   onChange={(e) => setTitle(e.target.value)}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-[#000000] transition-colors"
                   placeholder="Who would you like to hire today?"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Company Name
+                </label>
+                <input
+                  type="text"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-[#000000] transition-colors"
+                  placeholder="e.g. RetailCo Pakistan"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Branch Name
+                </label>
+                <input
+                  type="text"
+                  value={branchName}
+                  onChange={(e) => setBranchName(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-[#000000] transition-colors"
+                  placeholder="e.g. Gulberg Branch"
                   required
                 />
               </div>
