@@ -7,6 +7,24 @@ interface LanguageSelectionProps {
 }
 
 export function LanguageSelection({ language, onLanguageSelect, onContinue }: LanguageSelectionProps) {
+  
+  const handleContinue = () => {
+  fetch("http://127.0.0.1:8000/candidate/language", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ language }),
+  })
+    .then(res => res.json())
+    .then(data => {
+      console.log("Language sent to backend:", data);
+      onContinue(); // move to next screen
+    })
+    .catch(err => {
+      console.error("Failed to send language:", err);
+    });
+  };
   return (
     <div className="flex flex-col items-center justify-center min-h-[70vh]">
       <h1 className="text-4xl font-medium text-[#000000] mb-3 text-center">
@@ -42,7 +60,7 @@ export function LanguageSelection({ language, onLanguageSelect, onContinue }: La
       </div>
       
       <button
-        onClick={onContinue}
+        onClick={handleContinue}
         disabled={!language}
         className={`w-full max-w-md py-5 px-8 rounded-lg text-xl font-medium transition-all ${
           language
