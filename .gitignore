@@ -16,3 +16,5 @@ __pycache__/
 *.log
 
 /src/generated/prisma
+
+/src/generated/prisma

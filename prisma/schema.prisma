@@ -89,16 +89,25 @@ model job_questions {
 }
 
 model jobs {
-  job_id                 Int                      @id @default(autoincrement())
-  recruiter_id           Int
-  job_title              String
-  job_description        String
-  created_at             DateTime                 @default(now())
-  eligibility_text       String?
-  status                 String                   @default("open")
-  candidate_applications candidate_applications[]
-  job_questions          job_questions[]
-  recruiters             recruiters               @relation(fields: [recruiter_id], references: [recruiter_id], onDelete: Cascade)
+  job_id                   Int                      @id @default(autoincrement())
+  recruiter_id             Int
+  job_title                String
+  job_description          String
+  created_at               DateTime                 @default(now())
+  updated_at               DateTime                 @default(now())
+  eligibility_text         String?
+  status                   String                   @default("open")
+  skills                   String[]                 @default([])
+  minimum_experience_years Int                      @default(0)
+  other_requirements       String?
+  location                 String                   @default("")
+  work_mode                WorkMode                 @default(REMOTE)
+  salary_monthly_pkr       Int                      @default(0)
+  cv_score_weightage       Int                      @default(50)
+  video_score_weightage    Int                      @default(50)
+  candidate_applications   candidate_applications[]
+  job_questions            job_questions[]
+  recruiters               recruiters               @relation(fields: [recruiter_id], references: [recruiter_id], onDelete: Cascade)
 }
 
 model recruiter_decisions {
@@ -148,4 +157,9 @@ model video_submissions {
   video_score            Int?
   quality_flag           String?
   candidate_applications candidate_applications @relation(fields: [application_id], references: [application_id], onDelete: Cascade)
+}
+
+enum WorkMode {
+  ONSITE
+  REMOTE
 }
