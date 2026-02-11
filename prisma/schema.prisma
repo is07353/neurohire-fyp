@@ -33,6 +33,8 @@ model ai_assessments {
   ai_recommendation      String?
   reason_summary         String?
   candidate_applications candidate_applications @relation(fields: [application_id], references: [application_id], onDelete: Cascade)
+
+  @@index([application_id])
 }
 
 model candidate_applications {
@@ -48,6 +50,8 @@ model candidate_applications {
   cv_data             cv_data?
   recruiter_decisions recruiter_decisions?
   video_submissions   video_submissions?
+
+  @@index([candidate_id, job_id])
 }
 
 model candidate_logs {
@@ -69,14 +73,21 @@ model candidates {
   candidate_logs         candidate_logs[]
 }
 
+// CV file is stored in UploadThing; only metadata is stored here (no binary in DB).
 model cv_data {
   cv_id                  Int                    @id @default(autoincrement())
   application_id         Int                    @unique
   cv_text                String
   parsed_keywords        String
   technical_score        Int?
-  cv_pdf                 Bytes?
+  cv_url                 String?
+  cv_file_key            String?
+  file_size              Int?
+  mime_type              String?
+  uploaded_at            DateTime               @default(now())
   candidate_applications candidate_applications @relation(fields: [application_id], references: [application_id], onDelete: Cascade)
+
+  @@index([application_id])
 }
 
 model error_logs {
@@ -126,6 +137,8 @@ model jobs {
   candidate_applications candidate_applications[]
   video_questions       job_questions[]          // job-specific video questions
   recruiters            recruiters               @relation(fields: [recruiter_id], references: [recruiter_id], onDelete: Cascade)
+
+  @@index([recruiter_id])
 }
 
 model recruiter_decisions {
@@ -167,12 +180,19 @@ model system_settings {
   updated_at    DateTime
 }
 
+// Video file is stored in UploadThing; only metadata is stored here (no binary in DB).
 model video_submissions {
   video_id               Int                    @id @default(autoincrement())
   application_id         Int                    @unique
-  video_path             String
+  video_url              String
+  video_file_key         String
+  file_size              Int?
+  mime_type              String?
+  created_at             DateTime               @default(now())
   audio_transcript       String?
   video_score            Int?
   quality_flag           String?
   candidate_applications candidate_applications @relation(fields: [application_id], references: [application_id], onDelete: Cascade)
+
+  @@index([application_id])
 }

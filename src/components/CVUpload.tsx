@@ -45,7 +45,7 @@ export function CVUpload({ language, cvFile, onCVUpload, onContinue }: CVUploadP
       console.log('[UploadThing] Client upload complete:', res);
       setUploadComplete(true);
 
-      // Send the uploaded file URL to the FastAPI backend
+      // Send the uploaded file URL + basic metadata to the FastAPI backend
       try {
         const first = Array.isArray(res) ? res[0] : undefined;
         const url = first?.url as string | undefined;
@@ -53,7 +53,11 @@ export function CVUpload({ language, cvFile, onCVUpload, onContinue }: CVUploadP
           fetch(`${API_BASE}/candidate/cv-url`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ file_url: url }),
+            body: JSON.stringify({
+              file_url: url,
+              file_size: cvFile?.size ?? null,
+              mime_type: cvFile?.type ?? null,
+            }),
           }).catch(() => {
             // Ignore errors; this call is best-effort
           });

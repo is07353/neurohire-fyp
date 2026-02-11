@@ -1,9 +1,9 @@
 """API endpoints for candidate flow and health."""
 import asyncpg
-from fastapi import APIRouter, Request, Depends
+from fastapi import APIRouter, Request, Depends, HTTPException
 from pydantic import BaseModel
 
-from repositories import candidate_repo, job_repo
+from repositories import candidate_repo, job_repo, cv_repo, application_repo
 
 router = APIRouter()
 
@@ -25,6 +25,8 @@ class CVUrlPayload(BaseModel):
     """Payload carrying the public URL of an uploaded CV."""
 
     file_url: str
+    file_size: int | None = None
+    mime_type: str | None = None
 
 
 async def get_db_pool(request: Request) -> asyncpg.Pool:
@@ -89,8 +91,46 @@ def get_candidate_selected_job(session_id: str = ""):
 
 
 @router.post("/candidate/cv-url")
-def receive_cv_url(payload: CVUrlPayload):
-    """Receive the uploaded CV URL from the frontend and print it."""
+async def receive_cv_url(
+    payload: CVUrlPayload,
+    pool: asyncpg.Pool = Depends(get_db_pool),
+):
+    """
+    Receive the uploaded CV URL from the frontend and:
+    - create a minimal candidate row, and
+    - store basic CV metadata in the cv_data table.
+
+    This ensures there is at least one candidate record as soon as a CV is uploaded.
+    """
     print("[Candidate CV URL]", payload.file_url)
-    # In future you can store this in DB or trigger processing here
-    return {"ok": True}
+
+    # Ensure we have a selected job (from the earlier step in the flow)
+    selected = _candidate_selected_job.get("default")
+    if not selected or not selected.get("job_id"):
+        raise HTTPException(status_code=400, detail="No selected job for candidate CV upload")
+
+    try:
+        job_id = int(selected["job_id"])
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid job_id for candidate CV upload")
+
+    # 1) Create a minimal candidate row (fields will be filled later from parsing / review form)
+    candidate = await candidate_repo.create_candidate_minimal(pool)
+
+    # 2) Create a candidate application for this candidate + job
+    application = await application_repo.create_candidate_application(
+        pool,
+        candidate_id=candidate["candidate_id"],
+        job_id=job_id,
+    )
+
+    # 3) Store CV metadata, linked to the application_id (required, non-null FK)
+    cv_record = await cv_repo.insert_cv_metadata(
+        pool,
+        application_id=application["application_id"],
+        file_url=payload.file_url,
+        file_size=payload.file_size,
+        mime_type=payload.mime_type,
+    )
+
+    return {"ok": True, "candidate": candidate, "application": application, "cv": cv_record}
