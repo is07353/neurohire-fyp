@@ -1,6 +1,7 @@
 import { Language } from '../App';
 import { Video, Play, Square, Eye } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
+import { useUploadThing } from '../../lib/uploadthing';
 
 interface VideoInterviewProps {
   language: Language;
@@ -51,6 +52,10 @@ const translations = {
 
 type RecordingState = 'idle' | 'recording' | 'recorded' | 'previewing';
 
+const API_BASE =
+  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
+  'http://127.0.0.1:8000';
+
 export function VideoInterview({ language, onComplete }: VideoInterviewProps) {
   const t = translations[language || 'english'];
   const questions = questionsData[language || 'english'];
@@ -63,6 +68,18 @@ export function VideoInterview({ language, onComplete }: VideoInterviewProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<BlobPart[]>([]);
+  const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
+
+  const { startUpload, isUploading } = useUploadThing('videoUploader', {
+    onClientUploadComplete: (res) => {
+      console.log('[UploadThing][videoUploader] Client upload complete:', res);
+    },
+    onUploadError: (err) => {
+      console.error('[UploadThing][videoUploader] Upload error:', err);
+    },
+  });
 
   useEffect(() => {
     // Initialize camera
@@ -87,6 +104,9 @@ export function VideoInterview({ language, onComplete }: VideoInterviewProps) {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
+      if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+        recorderRef.current.stop();
+      }
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
@@ -94,8 +114,39 @@ export function VideoInterview({ language, onComplete }: VideoInterviewProps) {
   }, []);
 
   const handleStartRecording = () => {
+    if (!streamRef.current) {
+      console.warn('[VideoInterview] No media stream available for recording');
+      return;
+    }
+
     setRecordingState('recording');
     setRecordingTime(0);
+    setRecordedBlob(null);
+    chunksRef.current = [];
+
+    try {
+      const mediaRecorder = new MediaRecorder(streamRef.current, {
+        mimeType: 'video/webm',
+      });
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          chunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: 'video/webm' });
+        setRecordedBlob(blob);
+        console.log('[VideoInterview] Recorded blob size:', blob.size);
+      };
+
+      recorderRef.current = mediaRecorder;
+      mediaRecorder.start();
+    } catch (err) {
+      console.error('[VideoInterview] Failed to start MediaRecorder:', err);
+      return;
+    }
     
     timerRef.current = setInterval(() => {
       setRecordingTime((prev) => {
@@ -111,6 +162,9 @@ export function VideoInterview({ language, onComplete }: VideoInterviewProps) {
   const handleStopRecording = () => {
     setRecordingState('recorded');
     setHasRecorded(true);
+    if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+      recorderRef.current.stop();
+    }
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
@@ -118,10 +172,60 @@ export function VideoInterview({ language, onComplete }: VideoInterviewProps) {
   };
 
   const handlePreview = () => {
+    if (recordedBlob && videoRef.current) {
+      const url = URL.createObjectURL(recordedBlob);
+      videoRef.current.srcObject = null;
+      videoRef.current.src = url;
+      videoRef.current.muted = false;
+      videoRef.current.controls = true;
+      void videoRef.current.play();
+    }
     setRecordingState('previewing');
   };
 
-  const handleSubmitAndNext = () => {
+  const handleSubmitAndNext = async () => {
+    if (!recordedBlob) {
+      console.warn('[VideoInterview] No recorded video to upload');
+    } else {
+      try {
+        const file = new File(
+          [recordedBlob],
+          `interview-q${currentQuestionIndex + 1}.webm`,
+          { type: recordedBlob.type || 'video/webm' },
+        );
+
+        console.log('[VideoInterview] Starting upload of recorded video...', {
+          name: file.name,
+          size: file.size,
+          type: file.type,
+        });
+
+        const result = await startUpload([file]);
+        const first = Array.isArray(result) ? result[0] : undefined;
+        const url = first?.url as string | undefined;
+        const key = (first as { key?: string } | undefined)?.key;
+
+        if (url) {
+          await fetch(`${API_BASE}/candidate/video-url`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              file_url: url,
+              file_key: key ?? null,
+              file_size: file.size,
+              mime_type: file.type,
+              question_index: currentQuestionIndex,
+              question_text: currentQuestion,
+            }),
+          }).catch(() => {
+            // best-effort; don't block UI on network failure
+          });
+        }
+      } catch (err) {
+        console.error('[VideoInterview] Error uploading video:', err);
+      }
+    }
+
     if (currentQuestionIndex < questions.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
       setRecordingState('idle');
@@ -227,9 +331,14 @@ export function VideoInterview({ language, onComplete }: VideoInterviewProps) {
             
             <button
               onClick={handleSubmitAndNext}
-              className="w-full py-5 px-8 rounded-lg text-xl font-medium bg-[#000000] text-white hover:bg-[#333333] active:bg-[#000000] transition-all"
+              disabled={isUploading}
+              className="w-full py-5 px-8 rounded-lg text-xl font-medium bg-[#000000] text-white hover:bg-[#333333] active:bg-[#000000] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {isLastQuestion ? t.submitFinal : t.submitNext}
+              {isUploading
+                ? 'Uploading...'
+                : isLastQuestion
+                  ? t.submitFinal
+                  : t.submitNext}
             </button>
           </div>
         )}
@@ -237,9 +346,14 @@ export function VideoInterview({ language, onComplete }: VideoInterviewProps) {
         {recordingState === 'previewing' && (
           <button
             onClick={handleSubmitAndNext}
-            className="w-full py-5 px-8 rounded-lg text-xl font-medium bg-[#000000] text-white hover:bg-[#333333] active:bg-[#000000] transition-all"
+            disabled={isUploading}
+            className="w-full py-5 px-8 rounded-lg text-xl font-medium bg-[#000000] text-white hover:bg-[#333333] active:bg-[#000000] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {isLastQuestion ? t.submitFinal : t.submitNext}
+            {isUploading
+              ? 'Uploading...'
+              : isLastQuestion
+                ? t.submitFinal
+                : t.submitNext}
           </button>
         )}
       </div>

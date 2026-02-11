@@ -7,12 +7,24 @@ import { createUploadthing, createRouteHandler } from "uploadthing/express";
 const f = createUploadthing();
 
 const uploadRouter = {
+  // Existing route for CVs (PDF + image)
   mediaUploader: f({
-    // Allow CV uploads: PDFs and images
     pdf: { maxFileSize: "4MB" },
     image: { maxFileSize: "4MB" },
   }).onUploadComplete(async ({ file }) => {
-    console.log("[UploadThing Express] Upload complete:", {
+    console.log("[UploadThing Express][mediaUploader] Upload complete:", {
+      name: file.name,
+      url: file.url,
+      size: file.size,
+      key: file.key,
+    });
+  }),
+
+  // New route for video interview recordings
+  videoUploader: f({
+    video: { maxFileSize: "64MB" },
+  }).onUploadComplete(async ({ file }) => {
+    console.log("[UploadThing Express][videoUploader] Upload complete:", {
       name: file.name,
       url: file.url,
       size: file.size,

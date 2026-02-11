@@ -49,7 +49,8 @@ model candidate_applications {
   jobs                jobs                 @relation(fields: [job_id], references: [job_id], onDelete: Cascade)
   cv_data             cv_data?
   recruiter_decisions recruiter_decisions?
-  video_submissions   video_submissions?
+  // One application can have multiple video submissions (one per job question).
+  video_submissions   video_submissions[]  @relation("ApplicationVideoSubmissions")
 
   @@index([candidate_id, job_id])
 }
@@ -181,18 +182,23 @@ model system_settings {
 }
 
 // Video file is stored in UploadThing; only metadata is stored here (no binary in DB).
+// One application can have multiple video answers (one per question index).
 model video_submissions {
-  video_id               Int                    @id @default(autoincrement())
-  application_id         Int                    @unique
-  video_url              String
-  video_file_key         String
-  file_size              Int?
-  mime_type              String?
-  created_at             DateTime               @default(now())
-  audio_transcript       String?
-  video_score            Int?
-  quality_flag           String?
-  candidate_applications candidate_applications @relation(fields: [application_id], references: [application_id], onDelete: Cascade)
+  video_id        Int    @id @default(autoincrement())
+  application_id  Int
+  question_index  Int
+  question_text   String
+  video_url       String
+  video_file_key  String
+  file_size       Int?
+  mime_type       String?
+  created_at      DateTime @default(now())
+  audio_transcript String?
+  video_score     Int?
+  quality_flag    String?
+
+  candidate_applications candidate_applications @relation("ApplicationVideoSubmissions", fields: [application_id], references: [application_id], onDelete: Cascade)
 
   @@index([application_id])
+  @@unique([application_id, question_index])
 }

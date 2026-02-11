@@ -1,0 +1,62 @@
+"""DB operations for video interview submissions (video_submissions table)."""
+import asyncpg
+
+
+async def upsert_video_metadata(
+    pool: asyncpg.Pool,
+    *,
+    application_id: int,
+    question_index: int,
+    question_text: str,
+    video_url: str,
+    video_file_key: str | None,
+    file_size: int | None,
+    mime_type: str | None,
+) -> dict:
+    """Insert or update the video_submissions row for an application + question index.
+
+    The schema enforces one video per (application_id, question_index). If a
+    row already exists for that pair, we update it with the latest URL/metadata.
+    """
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            INSERT INTO video_submissions (
+                application_id,
+                question_index,
+                question_text,
+                video_url,
+                video_file_key,
+                file_size,
+                mime_type
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (application_id, question_index) DO UPDATE SET
+                question_text = EXCLUDED.question_text,
+                video_url = EXCLUDED.video_url,
+                video_file_key = EXCLUDED.video_file_key,
+                file_size = EXCLUDED.file_size,
+                mime_type = EXCLUDED.mime_type,
+                created_at = NOW()
+            RETURNING
+                video_id,
+                application_id,
+                question_index,
+                question_text,
+                video_url,
+                video_file_key,
+                file_size,
+                mime_type,
+                created_at;
+            """,
+            application_id,
+            question_index,
+            question_text,
+            video_url,
+            video_file_key,
+            file_size,
+            mime_type,
+        )
+
+    return dict(row)
+
