@@ -1,9 +1,9 @@
 """API endpoints for recruiter sign-up, login, approvals, and job listing."""
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Query, status
 from pydantic import BaseModel, EmailStr
 
-from repositories import recruiter_repo, job_repo
+from repositories import recruiter_repo, job_repo, application_repo
 
 router = APIRouter(prefix="/recruiter", tags=["recruiter"])
 
@@ -96,8 +96,10 @@ async def recruiter_login(
 class RecruiterJob(BaseModel):
   id: str
   title: str
+  companyName: str
   location: str
   status: str
+  salary: int
   cvWeight: int
   videoWeight: int
   applicantCount: int = 0
@@ -105,7 +107,7 @@ class RecruiterJob(BaseModel):
 
 @router.get("/jobs", response_model=list[RecruiterJob])
 async def list_recruiter_jobs(
-  recruiter_id: int | None = None,
+  recruiter_id: int | None = Query(None, description="Filter jobs by recruiter ID"),
   pool: asyncpg.Pool = Depends(get_db_pool),
 ):
   """List jobs for recruiter dashboard.
@@ -113,22 +115,33 @@ async def list_recruiter_jobs(
   If recruiter_id is provided, only jobs created by that recruiter are returned.
   Otherwise, all open jobs are returned (fallback/default).
   """
+  print(f"list_recruiter_jobs: recruiter_id={recruiter_id}")  # Debug logging
   if recruiter_id is not None:
     rows = await job_repo.list_jobs_for_recruiter(pool, recruiter_id=recruiter_id)
+    print(f"list_recruiter_jobs: Found {len(rows)} jobs for recruiter {recruiter_id}")  # Debug logging
   else:
     rows = await job_repo.list_open_jobs(pool)
+    print(f"list_recruiter_jobs: Found {len(rows)} open jobs (no recruiter_id filter)")  # Debug logging
+
+  # Fetch applicant counts per job
+  job_ids = [int(r["id"]) for r in rows if r.get("id")]
+  applicant_counts = await application_repo.count_applications_by_job(pool, job_ids) if job_ids else {}
+
   # Map candidate-facing job structure to recruiter dashboard structure.
   jobs: list[RecruiterJob] = []
   for r in rows:
+    jid = int(r.get("id") or 0)
     jobs.append(
       RecruiterJob(
         id=str(r.get("id") or ""),
         title=str(r.get("title") or ""),
+        companyName=str(r.get("company_name") or ""),
         location=str(r.get("location") or ""),
         status=str(r.get("status") or "open"),
+        salary=int(r.get("salary_monthly_pkr") or r.get("salary") or 0),
         cvWeight=int(r.get("cv_score_weightage") or 50),
         videoWeight=int(r.get("video_score_weightage") or 50),
-        applicantCount=0,
+        applicantCount=applicant_counts.get(jid, 0),
       )
     )
   return jobs
@@ -152,20 +165,28 @@ class CreateJobPayload(BaseModel):
 @router.post("/jobs", response_model=RecruiterJob, status_code=status.HTTP_201_CREATED)
 async def create_recruiter_job(
   payload: CreateJobPayload,
+  recruiter_id: int = Query(..., description="Recruiter ID creating the job"),
   pool: asyncpg.Pool = Depends(get_db_pool),
 ):
-  """Create a new job from recruiter Add Job form."""
-  # For now, use the first recruiter as owner; later you can derive from auth.
+  """Create a new job from recruiter Add Job form.
+  
+  recruiter_id is required and must be provided as a query parameter.
+  """
+  # Verify recruiter exists
   async with pool.acquire() as conn:
-    r = await conn.fetchrow("SELECT recruiter_id FROM recruiters ORDER BY recruiter_id LIMIT 1;")
-  if not r:
-    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No recruiter found in database")
-  recruiter_id = int(r["recruiter_id"])
+    recruiter_check = await conn.fetchrow(
+      "SELECT recruiter_id FROM recruiters WHERE recruiter_id = $1;",
+      recruiter_id,
+    )
+    if not recruiter_check:
+      raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recruiter not found")
 
   # Map workMode from UI ("Onsite"/"Remote") to DB enum ("ONSITE"/"REMOTE")
   work_mode = "REMOTE"
   if "Onsite" in payload.workMode:
     work_mode = "ONSITE"
+
+  print(f"create_recruiter_job: Creating job for recruiter_id={recruiter_id}")  # Debug logging
 
   try:
     row = await job_repo.create_job(
@@ -197,12 +218,186 @@ async def create_recruiter_job(
   return RecruiterJob(
     id=str(row["job_id"]),
     title=row["job_title"],
+    companyName=row.get("company_name") or "",
     location=row["location"],
     status=row["status"],
+    salary=row.get("salary_monthly_pkr") or 0,
     cvWeight=row["cv_score_weightage"],
     videoWeight=row["video_score_weightage"],
     applicantCount=0,
   )
+
+
+@router.get("/jobs/{job_id}", response_model=dict)
+async def get_job(
+  job_id: int,
+  pool: asyncpg.Pool = Depends(get_db_pool),
+):
+  """Get a single job by ID with all details including questions."""
+  job = await job_repo.get_job_by_id(pool, job_id=job_id)
+  if not job:
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+  return job
+
+
+class JobApplicantResponse(BaseModel):
+  application_id: int
+  candidate_id: int
+  job_id: int
+  status: str
+  candidate_name: str
+  cv_score: int | None
+  video_score: int | None
+  total_score: int | None
+
+
+@router.get("/jobs/{job_id}/applicants", response_model=list[JobApplicantResponse])
+async def list_job_applicants(
+  job_id: int,
+  pool: asyncpg.Pool = Depends(get_db_pool),
+):
+  """List applicants for a job with cv_score, video_score, total_score from ai_assessments."""
+  # Verify job exists
+  job = await job_repo.get_job_by_id(pool, job_id=job_id)
+  if not job:
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+  rows = await application_repo.list_applications_for_job(pool, job_id=job_id)
+  return [
+    JobApplicantResponse(
+      application_id=r["application_id"],
+      candidate_id=r["candidate_id"],
+      job_id=r["job_id"],
+      status=r["status"],
+      candidate_name=r["candidate_name"],
+      cv_score=r["cv_score"],
+      video_score=r["video_score"],
+      total_score=r["total_score"],
+    )
+    for r in rows
+  ]
+
+
+class UpdateJobPayload(BaseModel):
+  title: str
+  companyName: str
+  branchName: str
+  location: str
+  skills: list[str] = []
+  minExperience: int
+  otherRequirements: str | None = None
+  workMode: list[str] = []  # e.g. ["Onsite"] or ["Remote"]
+  salary: int
+  cvWeight: int
+  videoWeight: int
+  questions: list[str] = []
+
+
+@router.put("/jobs/{job_id}", response_model=RecruiterJob)
+async def update_recruiter_job(
+  job_id: int,
+  payload: UpdateJobPayload,
+  pool: asyncpg.Pool = Depends(get_db_pool),
+):
+  """Update an existing job."""
+  # Map workMode from UI ("Onsite"/"Remote") to DB enum ("ONSITE"/"REMOTE")
+  work_mode = "REMOTE"
+  if "Onsite" in payload.workMode:
+    work_mode = "ONSITE"
+  
+  try:
+    row = await job_repo.update_job(
+      pool,
+      job_id=job_id,
+      job_title=payload.title,
+      company_name=payload.companyName,
+      branch_name=payload.branchName,
+      location=payload.location,
+      work_mode=work_mode,
+      salary_monthly_pkr=payload.salary,
+      minimum_experience_years=payload.minExperience,
+      skills=payload.skills,
+      other_requirements=payload.otherRequirements or "",
+      cv_score_weightage=payload.cvWeight,
+      video_score_weightage=payload.videoWeight,
+    )
+  except ValueError as exc:
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+  
+  if not row:
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+  
+  # Update job questions
+  await job_repo.update_job_questions(
+    pool,
+    job_id=job_id,
+    questions=payload.questions,
+  )
+  
+  return RecruiterJob(
+    id=str(row["job_id"]),
+    title=row["job_title"],
+    companyName=row.get("company_name") or "",
+    location=row["location"],
+    status=row["status"],
+    salary=row.get("salary_monthly_pkr") or 0,
+    cvWeight=row["cv_score_weightage"],
+    videoWeight=row["video_score_weightage"],
+    applicantCount=0,
+  )
+
+
+class UpdateJobStatusPayload(BaseModel):
+  status: str  # "open" or "closed"
+
+
+@router.patch("/jobs/{job_id}/status", response_model=RecruiterJob)
+async def update_job_status(
+  job_id: int,
+  payload: UpdateJobStatusPayload,
+  pool: asyncpg.Pool = Depends(get_db_pool),
+):
+  """Update the status of a job (open/closed)."""
+  if payload.status not in ("open", "closed"):
+    raise HTTPException(
+      status_code=status.HTTP_400_BAD_REQUEST,
+      detail="Status must be 'open' or 'closed'"
+    )
+  
+  try:
+    row = await job_repo.update_job_status(pool, job_id=job_id, status=payload.status)
+  except ValueError as exc:
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+  
+  if not row:
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+  
+  return RecruiterJob(
+    id=str(row["job_id"]),
+    title=row["job_title"],
+    companyName=row.get("company_name") or "",
+    location=row["location"],
+    status=row["status"],
+    salary=row.get("salary_monthly_pkr") or 0,
+    cvWeight=row["cv_score_weightage"],
+    videoWeight=row["video_score_weightage"],
+    applicantCount=0,
+  )
+
+
+@router.delete("/jobs/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_recruiter_job(
+  job_id: int,
+  pool: asyncpg.Pool = Depends(get_db_pool),
+):
+  """Delete a job and its associated questions.
+  
+  Due to CASCADE delete on job_questions relation, deleting a job
+  will automatically delete all associated questions from the job_questions table.
+  """
+  ok = await job_repo.delete_job(pool, job_id=job_id)
+  if not ok:
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+  return
 
 
 class RecruiterListItem(BaseModel):

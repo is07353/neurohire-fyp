@@ -41,6 +41,7 @@ export interface Job {
   status: 'open' | 'closed';
   companyName?: string;
   branchName?: string;
+  salary?: number;
 }
 
 export interface Applicant {
@@ -49,6 +50,7 @@ export interface Applicant {
   jobId: string;
   cvScore: number;
   videoScore: number;
+  totalScore?: number;
   status: 'pending' | 'accepted' | 'rejected' | 'interview';
 }
 
@@ -73,11 +75,17 @@ export default function App() {
   };
 
   const handleRecruiterLogin = (name: string, id?: number) => {
+    // eslint-disable-next-line no-console
+    console.log('App: handleRecruiterLogin called with name:', name, 'id:', id);
     setRecruiterName(name);
     if (typeof id === 'number') {
       setRecruiterId(id);
+      // eslint-disable-next-line no-console
+      console.log('App: Set recruiterId to:', id);
     } else {
       setRecruiterId(null);
+      // eslint-disable-next-line no-console
+      console.warn('App: recruiterId is not a number, setting to null');
     }
     setCurrentView('recruiter-dashboard');
   };
@@ -203,6 +211,7 @@ export default function App() {
       {currentView === 'add-job' && (
         <AddJob
           recruiterName={recruiterName}
+          recruiterId={recruiterId}
           onBack={handleBackToMyJobs}
           onLogout={handleLogout}
         />

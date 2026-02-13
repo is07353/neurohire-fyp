@@ -59,6 +59,12 @@ model ai_assessments {
   // Full raw JSON output from the CV–JD model
   cv_jd_output            Json?
 
+  // Video analysis score (application-level; per-question scores remain in video_submissions)
+  video_score             Int?
+
+  // Average of cv_score and video_score (weighted by job weightage can be applied in app)
+  total_score             Int?
+
   candidate_applications  candidate_applications @relation(fields: [application_id], references: [application_id], onDelete: Cascade)
 
   @@index([application_id])

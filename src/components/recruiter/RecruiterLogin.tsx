@@ -42,8 +42,13 @@ export function RecruiterLogin({ onLogin, onBack, onSignUp, title = 'Recruiter L
       }
 
       const data = (await res.json()) as { fullName?: string; recruiterId?: number };
+      // eslint-disable-next-line no-console
+      console.log('RecruiterLogin: Login response:', data);
       const name = data.fullName || email.split('@')[0] || 'Recruiter';
-      onLogin(name, data.recruiterId);
+      const id = data.recruiterId;
+      // eslint-disable-next-line no-console
+      console.log('RecruiterLogin: Calling onLogin with name:', name, 'id:', id);
+      onLogin(name, id);
     } catch (err) {
       setLoginError(err instanceof Error ? err.message : 'Failed to log in');
     } finally {
