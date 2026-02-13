@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ArrowLeft, ChevronDown, X, Plus, Trash2 } from 'lucide-react';
 import neurohireLogo from '@/assets/neurohire-logo.png';
 import type { Job } from '../../App';
@@ -10,21 +10,28 @@ interface EditJobProps {
   onLogout: () => void;
 }
 
+const API_BASE =
+  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
+  'http://127.0.0.1:8000';
+
 export function EditJob({ job, recruiterName, onBack, onLogout }: EditJobProps) {
   const [title, setTitle] = useState(job.title);
   const [companyName, setCompanyName] = useState((job as { companyName?: string }).companyName ?? '');
   const [branchName, setBranchName] = useState((job as { branchName?: string }).branchName ?? '');
   const [location, setLocation] = useState(job.location);
-  const [skills, setSkills] = useState<string[]>(['Customer Handling', 'Inventory']);
+  const [skills, setSkills] = useState<string[]>([]);
   const [skillInput, setSkillInput] = useState('');
-  const [minExperience, setMinExperience] = useState(2);
+  const [minExperience, setMinExperience] = useState(0);
   const [otherRequirements, setOtherRequirements] = useState('');
-  const [workMode, setWorkMode] = useState<string[]>(['Onsite']);
-  const [salary, setSalary] = useState('50000');
-  const [questions, setQuestions] = useState(['']);
+  const [workMode, setWorkMode] = useState<string[]>([]);
+  const [salary, setSalary] = useState('0');
+  const [questions, setQuestions] = useState<string[]>(['']);
   const [cvWeight, setCvWeight] = useState(job.cvWeight);
   const [videoWeight, setVideoWeight] = useState(job.videoWeight);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Get initials from recruiter name
   const getInitials = (name: string) => {
@@ -48,11 +55,8 @@ export function EditJob({ job, recruiterName, onBack, onLogout }: EditJobProps) 
   };
 
   const toggleWorkMode = (mode: string) => {
-    if (workMode.includes(mode)) {
-      setWorkMode(workMode.filter(m => m !== mode));
-    } else {
-      setWorkMode([...workMode, mode]);
-    }
+    // Work mode should be single selection (Onsite OR Remote)
+    setWorkMode([mode]);
   };
 
   const handleCvWeightChange = (value: number) => {
@@ -81,10 +85,98 @@ export function EditJob({ job, recruiterName, onBack, onLogout }: EditJobProps) 
     setQuestions(newQuestions);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Load existing job data when component mounts
+  useEffect(() => {
+    let cancelled = false;
+    const loadJobData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const res = await fetch(`${API_BASE}/recruiter/jobs/${job.id}`);
+        if (!res.ok) {
+          throw new Error(`Failed to load job: ${res.status}`);
+        }
+        const data = await res.json();
+        
+        if (!cancelled) {
+          setTitle(data.title || job.title);
+          setCompanyName(data.company_name || '');
+          setBranchName(data.branch_name || '');
+          setLocation(data.location || job.location);
+          setSkills(data.skills || []);
+          setMinExperience(data.minExperience || 0);
+          setOtherRequirements(data.otherRequirements || '');
+          setWorkMode(data.workMode || []);
+          setSalary(String(data.salary || job.salary || 0));
+          setQuestions(data.questions && data.questions.length > 0 ? data.questions : ['']);
+          setCvWeight(data.cv_score_weightage || job.cvWeight);
+          setVideoWeight(data.video_score_weightage || job.videoWeight);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Failed to load job data');
+          // Fallback to using job prop data
+          setTitle(job.title);
+          setCompanyName((job as { companyName?: string }).companyName ?? '');
+          setLocation(job.location);
+          setSalary(String((job as { salary?: number }).salary || 0));
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+    
+    loadJobData();
+    return () => {
+      cancelled = true;
+    };
+  }, [job.id, job.title, job.location, job.cvWeight, job.videoWeight]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Updated job:', { title, companyName, branchName, location, questions, cvWeight, videoWeight });
-    onBack();
+    setSaving(true);
+    setError(null);
+    
+    try {
+      // Filter out empty questions
+      const validQuestions = questions.filter(q => q.trim().length > 0);
+      
+      const payload = {
+        title,
+        companyName,
+        branchName,
+        location,
+        skills,
+        minExperience,
+        otherRequirements: otherRequirements || null,
+        workMode,
+        salary: parseInt(salary, 10),
+        cvWeight,
+        videoWeight,
+        questions: validQuestions.length > 0 ? validQuestions : [''],
+      };
+      
+      const res = await fetch(`${API_BASE}/recruiter/jobs/${job.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+      
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ detail: `Failed to update job: ${res.status}` }));
+        throw new Error(errorData.detail || `Failed to update job: ${res.status}`);
+      }
+      
+      // Success - go back to job list
+      onBack();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save changes');
+      setSaving(false);
+    }
   };
 
   return (
@@ -146,7 +238,18 @@ export function EditJob({ job, recruiterName, onBack, onLogout }: EditJobProps) 
           Edit Job Position
         </h1>
         
-        <form onSubmit={handleSubmit} className="space-y-6">
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800">
+            {error}
+          </div>
+        )}
+        
+        {loading ? (
+          <div className="text-center py-12 text-gray-500">
+            Loading job details...
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-6">
           {/* Job Details */}
           <div className="bg-white rounded-lg border border-gray-200 p-6">
             <h3 className="text-xl font-medium text-[#000000] mb-6">Job Details</h3>
@@ -438,12 +541,14 @@ engineering is required."
             </button>
             <button
               type="submit"
-              className="flex-1 bg-[#000000] text-white py-3 px-6 rounded-lg hover:bg-gray-800 transition-all font-medium"
+              disabled={saving}
+              className="flex-1 bg-[#000000] text-white py-3 px-6 rounded-lg hover:bg-gray-800 transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Save Changes
+              {saving ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
         </form>
+        )}
       </div>
     </div>
   );

@@ -314,6 +314,107 @@ async def insert_job_questions(
         )
 
 
+async def get_job_by_id(pool: asyncpg.Pool, job_id: int) -> dict | None:
+    """Get a single job by ID with all details including questions."""
+    async with pool.acquire() as conn:
+        # Get job details
+        job_row = await conn.fetchrow(
+            """
+            SELECT
+                job_id,
+                recruiter_id,
+                job_title,
+                company_name,
+                branch_name,
+                job_description,
+                status,
+                skills,
+                minimum_experience_years,
+                other_requirements,
+                location,
+                work_mode::text AS work_mode,
+                salary_monthly_pkr,
+                cv_score_weightage,
+                video_score_weightage
+            FROM jobs
+            WHERE job_id = $1;
+            """,
+            job_id,
+        )
+        
+        if not job_row:
+            return None
+        
+        # Get job questions
+        question_rows = await conn.fetch(
+            """
+            SELECT question_text
+            FROM job_questions
+            WHERE job_id = $1
+            ORDER BY question_id;
+            """,
+            job_id,
+        )
+        
+        questions = [r["question_text"] for r in question_rows]
+        
+        # Parse job_description JSON if it exists
+        job_desc = job_row["job_description"]
+        if isinstance(job_desc, dict):
+            other_req = job_desc.get("other_requirements", job_row["other_requirements"] or "")
+        else:
+            other_req = job_row["other_requirements"] or ""
+        
+        # Convert work_mode from DB format ("ONSITE"/"REMOTE") to UI format ("Onsite"/"Remote")
+        work_mode_ui = []
+        if job_row["work_mode"]:
+            if job_row["work_mode"] == "ONSITE":
+                work_mode_ui = ["Onsite"]
+            elif job_row["work_mode"] == "REMOTE":
+                work_mode_ui = ["Remote"]
+        
+        return {
+            "id": str(job_row["job_id"]),
+            "recruiter_id": job_row["recruiter_id"],
+            "title": job_row["job_title"],
+            "company_name": job_row["company_name"] or "",
+            "branch_name": job_row["branch_name"] or "",
+            "location": job_row["location"] or "",
+            "status": job_row["status"],
+            "skills": list(job_row["skills"]) if job_row["skills"] else [],
+            "minExperience": job_row["minimum_experience_years"] or 0,
+            "otherRequirements": other_req,
+            "workMode": work_mode_ui,
+            "salary": job_row["salary_monthly_pkr"] or 0,
+            "cv_score_weightage": job_row["cv_score_weightage"],
+            "video_score_weightage": job_row["video_score_weightage"],
+            "questions": questions,
+        }
+
+
+async def update_job_questions(
+    pool: asyncpg.Pool,
+    *,
+    job_id: int,
+    questions: list[str],
+) -> None:
+    """Replace all job questions for a job_id (delete old, insert new)."""
+    async with pool.acquire() as conn:
+        # Delete existing questions
+        await conn.execute(
+            "DELETE FROM job_questions WHERE job_id = $1;",
+            job_id,
+        )
+        
+        # Insert new questions
+        cleaned = [q.strip() for q in questions if q and q.strip()]
+        if cleaned:
+            await conn.executemany(
+                "INSERT INTO job_questions (job_id, question_text) VALUES ($1, $2);",
+                [(job_id, q) for q in cleaned],
+            )
+
+
 async def list_jobs_for_recruiter(pool: asyncpg.Pool, recruiter_id: int) -> list[dict]:
     """List all jobs created by a specific recruiter."""
     async with pool.acquire() as conn:
@@ -322,6 +423,7 @@ async def list_jobs_for_recruiter(pool: asyncpg.Pool, recruiter_id: int) -> list
             SELECT
                 job_id,
                 job_title,
+                company_name,
                 location,
                 status,
                 salary_monthly_pkr,
@@ -337,10 +439,122 @@ async def list_jobs_for_recruiter(pool: asyncpg.Pool, recruiter_id: int) -> list
         {
             "id": str(r["job_id"]),
             "title": r["job_title"],
+            "company_name": r["company_name"] or "",
             "location": r["location"] or "",
             "status": r["status"],
+            "salary_monthly_pkr": r["salary_monthly_pkr"] or 0,
             "cv_score_weightage": r["cv_score_weightage"],
             "video_score_weightage": r["video_score_weightage"],
         }
         for r in rows
     ]
+
+
+async def update_job_status(pool: asyncpg.Pool, job_id: int, status: str) -> dict | None:
+    """Update the status of a job (open/closed)."""
+    if status not in ("open", "closed"):
+        raise ValueError(f"Invalid status: {status}. Must be 'open' or 'closed'.")
+    
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            UPDATE jobs
+            SET status = $2, updated_at = NOW()
+            WHERE job_id = $1
+            RETURNING job_id, job_title, company_name, location, status, salary_monthly_pkr,
+                      cv_score_weightage, video_score_weightage;
+            """,
+            job_id,
+            status,
+        )
+    return dict(row) if row else None
+
+
+async def update_job(
+    pool: asyncpg.Pool,
+    *,
+    job_id: int,
+    job_title: str,
+    company_name: str,
+    branch_name: str,
+    location: str,
+    work_mode: str,
+    salary_monthly_pkr: int,
+    minimum_experience_years: int,
+    skills: list[str],
+    other_requirements: str,
+    cv_score_weightage: int,
+    video_score_weightage: int,
+) -> dict | None:
+    """Update all fields of an existing job."""
+    _validate_weightage_sum_100(cv_score_weightage, video_score_weightage)
+    
+    # Build JSON job_description combining title, skills, and other requirements
+    job_description = json.dumps(
+        {
+            "job_title": job_title,
+            "skills": skills,
+            "other_requirements": other_requirements,
+        }
+    )
+    
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            UPDATE jobs
+            SET
+                job_title = $2,
+                company_name = $3,
+                branch_name = $4,
+                job_description = $5,
+                location = $6,
+                work_mode = $7,
+                salary_monthly_pkr = $8,
+                minimum_experience_years = $9,
+                skills = $10,
+                other_requirements = $11,
+                cv_score_weightage = $12,
+                video_score_weightage = $13,
+                updated_at = NOW()
+            WHERE job_id = $1
+            RETURNING
+                job_id,
+                job_title,
+                company_name,
+                branch_name,
+                location,
+                status,
+                salary_monthly_pkr,
+                cv_score_weightage,
+                video_score_weightage;
+            """,
+            job_id,
+            job_title,
+            company_name,
+            branch_name,
+            job_description,
+            location,
+            work_mode,
+            salary_monthly_pkr,
+            minimum_experience_years,
+            skills,
+            other_requirements,
+            cv_score_weightage,
+            video_score_weightage,
+        )
+    return dict(row) if row else None
+
+
+async def delete_job(pool: asyncpg.Pool, job_id: int) -> bool:
+    """Delete a job and its associated questions.
+    
+    Due to CASCADE delete on job_questions relation, deleting a job
+    will automatically delete all associated questions.
+    """
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            "DELETE FROM jobs WHERE job_id = $1;",
+            job_id,
+        )
+    # result is like "DELETE 1"
+    return result.endswith(" 1")

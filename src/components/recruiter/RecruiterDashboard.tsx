@@ -28,33 +28,52 @@ export function RecruiterDashboard({
   const [searchQuery, setSearchQuery] = useState('');
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<'overview' | 'my-jobs'>('overview');
+  const [deleteConfirmJob, setDeleteConfirmJob] = useState<Job | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     const loadJobs = async () => {
-      if (!recruiterId) return;
+      if (!recruiterId) {
+        // eslint-disable-next-line no-console
+        console.warn('RecruiterDashboard: recruiterId is not set, cannot load jobs');
+        return;
+      }
       try {
-        const res = await fetch(`${API_BASE}/recruiter/jobs?recruiter_id=${recruiterId}`);
+        // eslint-disable-next-line no-console
+        console.log('RecruiterDashboard: Loading jobs for recruiter_id:', recruiterId, 'type:', typeof recruiterId);
+        const recruiterIdParam = Number(recruiterId);
+        if (isNaN(recruiterIdParam)) {
+          // eslint-disable-next-line no-console
+          console.error('RecruiterDashboard: Invalid recruiterId, cannot convert to number');
+          return;
+        }
+        const res = await fetch(`${API_BASE}/recruiter/jobs?recruiter_id=${recruiterIdParam}`);
         if (!res.ok) {
           // eslint-disable-next-line no-console
-          console.error('Failed to load recruiter jobs', res.status);
+          console.error('Failed to load recruiter jobs', res.status, await res.text().catch(() => ''));
           return;
         }
         const data = (await res.json()) as Array<{
           id: string;
           title: string;
+          companyName: string;
           location: string;
           status: string;
+          salary: number;
           cvWeight: number;
           videoWeight: number;
           applicantCount: number;
         }>;
+        // eslint-disable-next-line no-console
+        console.log('RecruiterDashboard: Loaded', data.length, 'jobs');
         if (!cancelled) {
           const mapped: Job[] = data.map((j) => ({
             id: j.id,
             title: j.title,
+            companyName: j.companyName,
             location: j.location,
             status: (j.status === 'closed' ? 'closed' : 'open') as 'open' | 'closed',
+            salary: j.salary,
             cvWeight: j.cvWeight,
             videoWeight: j.videoWeight,
             applicantCount: j.applicantCount ?? 0,
@@ -66,18 +85,61 @@ export function RecruiterDashboard({
         console.error('Error loading recruiter jobs', err);
       }
     };
-    loadJobs();
+    // Reload jobs when recruiterId changes or when switching to 'my-jobs' view
+    if (currentView === 'my-jobs') {
+      loadJobs();
+    }
     return () => {
       cancelled = true;
     };
-  }, [recruiterId]);
+  }, [recruiterId, currentView]);
 
-  const handleToggleStatus = (jobId: string) => {
-    setJobs(jobs.map(job => 
-      job.id === jobId 
-        ? { ...job, status: job.status === 'open' ? 'closed' : 'open' }
-        : job
+  const handleToggleStatus = async (jobId: string) => {
+    const job = jobs.find(j => j.id === jobId);
+    if (!job) return;
+    
+    const newStatus = job.status === 'open' ? 'closed' : 'open';
+    
+    // Optimistically update UI
+    setJobs(jobs.map(j => 
+      j.id === jobId 
+        ? { ...j, status: newStatus }
+        : j
     ));
+    
+    try {
+      const res = await fetch(`${API_BASE}/recruiter/jobs/${jobId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      
+      if (!res.ok) {
+        // Revert on error
+        setJobs(jobs);
+        // eslint-disable-next-line no-console
+        console.error('Failed to update job status', res.status);
+        return;
+      }
+      
+      const updatedJob = await res.json();
+      // Update with server response to ensure consistency
+      setJobs(jobs.map(j => 
+        j.id === jobId 
+          ? {
+              ...j,
+              status: updatedJob.status === 'closed' ? 'closed' : 'open',
+            }
+          : j
+      ));
+    } catch (err) {
+      // Revert on error
+      setJobs(jobs);
+      // eslint-disable-next-line no-console
+      console.error('Error updating job status', err);
+    }
   };
 
   const filteredJobs = jobs.filter(job =>
@@ -102,6 +164,42 @@ export function RecruiterDashboard({
   const handleViewApplicants = (job: Job) => {
     setOpenDropdown(null);
     onViewApplicants(job);
+  };
+
+  const handleDeleteJob = (job: Job) => {
+    setOpenDropdown(null);
+    setDeleteConfirmJob(job);
+  };
+
+  const confirmDeleteJob = async () => {
+    if (!deleteConfirmJob) return;
+    
+    try {
+      const res = await fetch(`${API_BASE}/recruiter/jobs/${deleteConfirmJob.id}`, {
+        method: 'DELETE',
+      });
+      
+      if (!res.ok) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to delete job', res.status);
+        alert('Failed to delete job. Please try again.');
+        setDeleteConfirmJob(null);
+        return;
+      }
+      
+      // Remove job from local state
+      setJobs(jobs.filter(j => j.id !== deleteConfirmJob.id));
+      setDeleteConfirmJob(null);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('Error deleting job', err);
+      alert('Failed to delete job. Please try again.');
+      setDeleteConfirmJob(null);
+    }
+  };
+
+  const cancelDeleteJob = () => {
+    setDeleteConfirmJob(null);
   };
 
   // Pastel colors for job cards
@@ -243,7 +341,7 @@ export function RecruiterDashboard({
 
                   {/* Company Info */}
                   <div className="text-gray-700 mb-4">
-                    <span>KFC • PKR 20,000 • {job.location}</span>
+                    <span>{job.companyName || 'N/A'} • PKR {job.salary?.toLocaleString() || '0'} • {job.location}</span>
                   </div>
 
                   {/* Actions Row */}
@@ -300,6 +398,12 @@ export function RecruiterDashboard({
                           >
                             View Applicants
                           </button>
+                          <button
+                            onClick={() => handleDeleteJob(job)}
+                            className="w-full text-left px-4 py-2 text-red-600 hover:bg-red-50 transition-colors"
+                          >
+                            Delete Job
+                          </button>
                         </div>
                       )}
                     </div>
@@ -313,6 +417,37 @@ export function RecruiterDashboard({
                 No jobs found matching your search.
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmJob && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+          {/* Modal - no backdrop */}
+          <div className="relative bg-white rounded-lg shadow-2xl border border-gray-200 max-w-md w-full mx-4 p-6 pointer-events-auto">
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">
+              Delete Job
+            </h3>
+            <p className="text-gray-700 mb-6">
+              Are you sure you want to delete <span className="font-medium">"{deleteConfirmJob.title}"</span>? 
+              This action cannot be undone.
+            </p>
+            
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={cancelDeleteJob}
+                className="px-6 py-2 border-2 border-gray-300 text-gray-700 rounded-lg hover:border-gray-400 hover:text-gray-900 transition-colors font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteJob}
+                className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+              >
+                Delete
+              </button>
+            </div>
           </div>
         </div>
       )}

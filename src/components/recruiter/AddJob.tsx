@@ -4,6 +4,7 @@ import neurohireLogo from '@/assets/neurohire-logo.png';
 
 interface AddJobProps {
   recruiterName: string;
+  recruiterId: number | null;
   onBack: () => void;
   onLogout: () => void;
 }
@@ -12,7 +13,7 @@ const API_BASE =
   (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
   'http://127.0.0.1:8000';
 
-export function AddJob({ recruiterName, onBack, onLogout }: AddJobProps) {
+export function AddJob({ recruiterName, recruiterId, onBack, onLogout }: AddJobProps) {
   const [title, setTitle] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [branchName, setBranchName] = useState('');
@@ -108,7 +109,19 @@ export function AddJob({ recruiterName, onBack, onLogout }: AddJobProps) {
 
     setSubmitting(true);
     try {
-      const res = await fetch(`${API_BASE}/recruiter/jobs`, {
+      // recruiter_id is required - throw error if not available
+      if (!recruiterId) {
+        setSubmitError('Recruiter ID is missing. Please log in again.');
+        setSubmitting(false);
+        return;
+      }
+      
+      // Build URL with recruiter_id query parameter (required)
+      const url = `${API_BASE}/recruiter/jobs?recruiter_id=${recruiterId}`;
+      // eslint-disable-next-line no-console
+      console.log('AddJob: Creating job with recruiter_id:', recruiterId);
+      
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -123,6 +136,7 @@ export function AddJob({ recruiterName, onBack, onLogout }: AddJobProps) {
           salary: salaryNumber,
           cvWeight,
           videoWeight,
+          questions: questions.filter(q => q.trim().length > 0),
         }),
       });
 
