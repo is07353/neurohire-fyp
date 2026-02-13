@@ -16,6 +16,10 @@ export interface SignUpData {
   recruiterRole?: string;
 }
 
+const API_BASE =
+  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
+  'http://127.0.0.1:8000';
+
 export function RecruiterSignUp({ onSignUp, onBackToLogin }: RecruiterSignUpProps) {
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
@@ -28,21 +32,55 @@ export function RecruiterSignUp({ onSignUp, onBackToLogin }: RecruiterSignUpProp
   const [termsExpanded, setTermsExpanded] = useState(false);
   const [privacyExpanded, setPrivacyExpanded] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const emailValid = emailRegex.test(email);
+
+  const employeeIdRegex = /^[A-Za-z0-9_-]+$/;
+  const employeeIdValid = employeeIdRegex.test(employeeId);
+
+  const passwordStrong = password.length >= 8;
   const passwordsMatch = password === confirmPassword && password.length > 0;
   const isFormValid = 
     email.trim() !== '' &&
+    emailValid &&
     username.trim() !== '' &&
     password.trim() !== '' &&
+    passwordStrong &&
     passwordsMatch &&
     fullName.trim() !== '' &&
     companyName.trim() !== '' &&
     employeeId.trim() !== '' &&
+    employeeIdValid &&
     agreedToTerms;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isFormValid) {
+    if (!isFormValid || submitting) return;
+    setSubmitError(null);
+    setSubmitting(true);
+    try {
+      const res = await fetch(`${API_BASE}/recruiter/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          username,
+          password,
+          fullName,
+          companyName,
+          employeeId: employeeId.trim(),
+          recruiterRole: recruiterRole.trim() || undefined,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { detail?: string };
+        throw new Error(data.detail || `Sign up failed (${res.status})`);
+      }
+
       onSignUp({
         email,
         username,
@@ -52,6 +90,10 @@ export function RecruiterSignUp({ onSignUp, onBackToLogin }: RecruiterSignUpProp
         employeeId: employeeId.trim(),
         recruiterRole: recruiterRole.trim() || undefined,
       });
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Failed to create recruiter account');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -87,10 +129,17 @@ export function RecruiterSignUp({ onSignUp, onBackToLogin }: RecruiterSignUpProp
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-[#FF13F0] transition-colors text-base"
+                className={`w-full px-4 py-3 border-2 rounded-lg focus:outline-none transition-colors text-base ${
+                  email && !emailValid
+                    ? 'border-red-500 focus:border-red-500'
+                    : 'border-gray-300 focus:border-[#FF13F0]'
+                }`}
                 placeholder="your.email@company.com"
                 required
               />
+              {email && !emailValid && (
+                <p className="text-red-500 text-sm mt-1">Enter a valid email address</p>
+              )}
             </div>
 
             <div>
@@ -117,10 +166,19 @@ export function RecruiterSignUp({ onSignUp, onBackToLogin }: RecruiterSignUpProp
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-[#FF13F0] transition-colors text-base"
+                className={`w-full px-4 py-3 border-2 rounded-lg focus:outline-none transition-colors text-base ${
+                  password && !passwordStrong
+                    ? 'border-red-500 focus:border-red-500'
+                    : 'border-gray-300 focus:border-[#FF13F0]'
+                }`}
                 placeholder="Create a strong password"
                 required
               />
+              {password && !passwordStrong && (
+                <p className="text-red-500 text-sm mt-1">
+                  Password must be at least 8 characters long
+                </p>
+              )}
             </div>
 
             <div>
@@ -183,10 +241,19 @@ export function RecruiterSignUp({ onSignUp, onBackToLogin }: RecruiterSignUpProp
                 type="text"
                 value={employeeId}
                 onChange={(e) => setEmployeeId(e.target.value)}
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-[#FF13F0] transition-colors text-base"
-                placeholder="e.g., 12345"
+                className={`w-full px-4 py-3 border-2 rounded-lg focus:outline-none transition-colors text-base ${
+                  employeeId && !employeeIdValid
+                    ? 'border-red-500 focus:border-red-500'
+                    : 'border-gray-300 focus:border-[#FF13F0]'
+                }`}
+                placeholder="e.g., EMP001"
                 required
               />
+              {employeeId && !employeeIdValid && (
+                <p className="text-red-500 text-sm mt-1">
+                  Employee ID can only contain letters, numbers, underscores, or dashes
+                </p>
+              )}
             </div>
 
             <div>
@@ -298,17 +365,24 @@ export function RecruiterSignUp({ onSignUp, onBackToLogin }: RecruiterSignUpProp
             </div>
           </div>
 
+          {/* Error message */}
+          {submitError && (
+            <p className="text-red-500 text-sm mb-2">
+              {submitError}
+            </p>
+          )}
+
           {/* Create Account Button */}
           <button
             type="submit"
-            disabled={!isFormValid}
+            disabled={!isFormValid || submitting}
             className={`w-full py-3 px-6 rounded-lg text-lg font-medium transition-all ${
-              isFormValid
+              isFormValid && !submitting
                 ? 'bg-[#000000] text-white hover:bg-[#333333] cursor-pointer'
                 : 'bg-gray-300 text-gray-500 cursor-not-allowed'
             }`}
           >
-            Create Account
+            {submitting ? 'Creating Account…' : 'Create Account'}
           </button>
 
           {/* Secondary Navigation */}

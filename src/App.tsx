@@ -57,6 +57,7 @@ export default function App() {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [selectedApplicant, setSelectedApplicant] = useState<Applicant | null>(null);
   const [recruiterName, setRecruiterName] = useState<string>('');
+  const [recruiterId, setRecruiterId] = useState<number | null>(null);
   const [companyName, setCompanyName] = useState<string>('');
 
   const handleRoleSelect = (role: 'candidate' | 'recruiter' | 'admin' | 'super-admin') => {
@@ -71,8 +72,13 @@ export default function App() {
     }
   };
 
-  const handleRecruiterLogin = (name: string) => {
+  const handleRecruiterLogin = (name: string, id?: number) => {
     setRecruiterName(name);
+    if (typeof id === 'number') {
+      setRecruiterId(id);
+    } else {
+      setRecruiterId(null);
+    }
     setCurrentView('recruiter-dashboard');
   };
 
@@ -87,6 +93,7 @@ export default function App() {
 
   const handleLogout = () => {
     setRecruiterName('');
+    setRecruiterId(null);
     setSelectedJob(null);
     setSelectedApplicant(null);
     setCurrentView('landing');
@@ -145,10 +152,9 @@ export default function App() {
       
       {currentView === 'recruiter-signup' && (
         <RecruiterSignUp 
-          onSignUp={(data) => {
-            // Use fullName from signup data
-            setRecruiterName(data.fullName);
-            setCurrentView('recruiter-dashboard');
+          onSignUp={() => {
+            // After signup, send recruiter back to login; access is allowed only after company approval.
+            setCurrentView('recruiter-login');
           }}
           onBackToLogin={() => setCurrentView('recruiter-login')}
         />
@@ -157,6 +163,7 @@ export default function App() {
       {currentView === 'recruiter-dashboard' && (
         <RecruiterDashboard
           recruiterName={recruiterName}
+          recruiterId={recruiterId}
           onLogout={handleLogout}
           onViewApplicants={handleViewApplicants}
           onEditJob={handleEditJob}
@@ -222,7 +229,7 @@ export default function App() {
       
       {currentView === 'super-admin-login' && (
         <RecruiterLogin 
-          onLogin={handleAdminLogin}
+          onLogin={() => handleAdminLogin()}
           onBack={() => setCurrentView('landing')}
           title="Super Admin Login"
         />

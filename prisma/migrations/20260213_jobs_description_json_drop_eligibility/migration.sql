@@ -1,0 +1,1 @@
+-- no-op: jobs table already updated manually (job_description jsonb, eligibility_text dropped)

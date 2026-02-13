@@ -2,25 +2,52 @@ import { useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 
 interface RecruiterLoginProps {
-  onLogin: (name: string) => void;
+  onLogin: (name: string, recruiterId?: number) => void;
   onBack: () => void;
   onSignUp?: () => void;
   title?: string;
 }
 
+const API_BASE =
+  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
+  'http://127.0.0.1:8000';
+
 export function RecruiterLogin({ onLogin, onBack, onSignUp, title = 'Recruiter Login' }: RecruiterLoginProps) {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
   const [resetSent, setResetSent] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loggingIn, setLoggingIn] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const emailValid = emailRegex.test(email);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (username && password) {
-      // Mock login - use username as name
-      const name = username.split('.').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-      onLogin(name);
+    if (!email || !password || !emailValid || loggingIn) return;
+    setLoginError(null);
+    setLoggingIn(true);
+    try {
+      const res = await fetch(`${API_BASE}/recruiter/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { detail?: string };
+        throw new Error(data.detail || 'Login failed');
+      }
+
+      const data = (await res.json()) as { fullName?: string; recruiterId?: number };
+      const name = data.fullName || email.split('@')[0] || 'Recruiter';
+      onLogin(name, data.recruiterId);
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : 'Failed to log in');
+    } finally {
+      setLoggingIn(false);
     }
   };
 
@@ -57,16 +84,25 @@ export function RecruiterLogin({ onLogin, onBack, onSignUp, title = 'Recruiter L
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
                 <label className="block text-lg text-gray-700 mb-2">
-                  Username
+                  Email Address
                 </label>
                 <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-[#FF13F0] transition-colors text-base"
-                  placeholder="Enter your username"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className={`w-full px-4 py-3 border-2 rounded-lg focus:outline-none transition-colors text-base ${
+                    email && !emailValid
+                      ? 'border-red-500 focus:border-red-500'
+                      : 'border-gray-300 focus:border-[#FF13F0]'
+                  }`}
+                  placeholder="your.email@company.com"
                   required
                 />
+                {email && !emailValid && (
+                  <p className="text-red-500 text-sm mt-1">
+                    Enter a valid email address
+                  </p>
+                )}
               </div>
               
               <div>
@@ -92,11 +128,18 @@ export function RecruiterLogin({ onLogin, onBack, onSignUp, title = 'Recruiter L
                 </div>
               </div>
               
+              {loginError && (
+                <p className="text-red-500 text-sm">
+                  {loginError}
+                </p>
+              )}
+
               <button
                 type="submit"
-                className="w-full bg-[#000000] text-white py-3 px-6 rounded-lg text-lg font-medium hover:bg-[#333333] transition-all"
+                className="w-full bg-[#000000] text-white py-3 px-6 rounded-lg text-lg font-medium hover:bg-[#333333] transition-all disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed"
+                disabled={loggingIn}
               >
-                Login
+                {loggingIn ? 'Logging in…' : 'Login'}
               </button>
             </form>
 

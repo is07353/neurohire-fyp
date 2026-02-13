@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Search, UserPlus, CheckCircle, XCircle, Clock, Mail, Phone, Building2 } from 'lucide-react';
 import neurohireLogo from '@/assets/neurohire-logo.png';
 
@@ -7,7 +7,7 @@ interface CompanyRecruitersProps {
 }
 
 interface Recruiter {
-  id: string;
+  id: number;
   name: string;
   email: string;
   employeeId: string;
@@ -18,84 +18,81 @@ interface Recruiter {
   totalApplicants: number;
 }
 
-const mockRecruiters: Recruiter[] = [
-  {
-    id: '1',
-    name: 'Ahmed Khan',
-    email: 'ahmed.khan@company.com',
-    employeeId: 'EMP001',
-    role: 'Senior HR Manager',
-    status: 'approved',
-    joinedDate: 'Jan 15, 2026',
-    jobsPosted: 12,
-    totalApplicants: 89,
-  },
-  {
-    id: '2',
-    name: 'Sara Ali',
-    email: 'sara.ali@company.com',
-    employeeId: 'EMP002',
-    role: 'Recruitment Lead',
-    status: 'approved',
-    joinedDate: 'Jan 20, 2026',
-    jobsPosted: 9,
-    totalApplicants: 67,
-  },
-  {
-    id: '3',
-    name: 'Usman Malik',
-    email: 'usman.malik@company.com',
-    employeeId: 'EMP003',
-    role: 'HR Coordinator',
-    status: 'approved',
-    joinedDate: 'Jan 25, 2026',
-    jobsPosted: 7,
-    totalApplicants: 54,
-  },
-  {
-    id: '4',
-    name: 'Ayesha Tariq',
-    email: 'ayesha.tariq@company.com',
-    employeeId: 'EMP004',
-    role: 'Talent Acquisition Specialist',
-    status: 'pending',
-    joinedDate: 'Feb 1, 2026',
-    jobsPosted: 0,
-    totalApplicants: 0,
-  },
-  {
-    id: '5',
-    name: 'Hassan Raza',
-    email: 'hassan.raza@company.com',
-    employeeId: 'EMP005',
-    role: 'HR Assistant',
-    status: 'approved',
-    joinedDate: 'Feb 3, 2026',
-    jobsPosted: 5,
-    totalApplicants: 38,
-  },
-];
+const API_BASE =
+  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
+  'http://127.0.0.1:8000';
 
 export function CompanyRecruiters({ companyName }: CompanyRecruitersProps) {
-  const [recruiters, setRecruiters] = useState<Recruiter[]>(mockRecruiters);
+  const [recruiters, setRecruiters] = useState<Recruiter[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'approved' | 'pending' | 'disabled'>('all');
 
-  const handleApprove = (recruiterId: string) => {
-    setRecruiters(recruiters.map(r => 
-      r.id === recruiterId ? { ...r, status: 'approved' as const } : r
-    ));
+  useEffect(() => {
+    let cancelled = false;
+    const loadRecruiters = async () => {
+      try {
+        const res = await fetch(
+          `${API_BASE}/recruiter/company-recruiters?company_name=${encodeURIComponent(companyName)}`
+        );
+        if (!res.ok) {
+          // eslint-disable-next-line no-console
+          console.error('Failed to load recruiters', res.status);
+          return;
+        }
+        const data = (await res.json()) as Recruiter[];
+        if (!cancelled) {
+          setRecruiters(data);
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('Error loading recruiters', err);
+      }
+    };
+    loadRecruiters();
+    return () => {
+      cancelled = true;
+    };
+  }, [companyName]);
+
+  const handleApprove = async (recruiterId: number) => {
+    try {
+      const res = await fetch(`${API_BASE}/recruiter/${recruiterId}/approve`, {
+        method: 'POST',
+      });
+      if (!res.ok) return;
+      setRecruiters(recruiters.map(r =>
+        r.id === recruiterId ? { ...r, status: 'approved' as const } : r
+      ));
+    } catch {
+      // ignore for now
+    }
   };
 
-  const handleDisable = (recruiterId: string) => {
-    setRecruiters(recruiters.map(r => 
-      r.id === recruiterId ? { ...r, status: 'disabled' as const } : r
-    ));
+  const handleDisable = async (recruiterId: number) => {
+    try {
+      const res = await fetch(`${API_BASE}/recruiter/${recruiterId}/disable`, {
+        method: 'POST',
+      });
+      if (!res.ok) return;
+      setRecruiters(recruiters.map(r =>
+        r.id === recruiterId ? { ...r, status: 'disabled' as const } : r
+      ));
+    } catch {
+      // ignore for now
+    }
   };
 
-  const handleDelete = (recruiterId: string) => {
+  const handleDelete = async (recruiterId: number) => {
     if (confirm('Are you sure you want to delete this recruiter? This action cannot be undone.')) {
-      setRecruiters(recruiters.filter(r => r.id !== recruiterId));
+      try {
+        const res = await fetch(`${API_BASE}/recruiter/${recruiterId}`, {
+          method: 'DELETE',
+        });
+        if (!res.ok) return;
+        setRecruiters(recruiters.filter(r => r.id !== recruiterId));
+      } catch {
+        // ignore for now
+      }
     }
   };
 

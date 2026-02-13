@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import create_pool
-from routes import candidate_routes, seed_routes
+from routes import candidate_routes, seed_routes, company_routes, recruiter_routes
 
 app = FastAPI()
 
@@ -38,3 +38,5 @@ async def shutdown_event():
 
 app.include_router(candidate_routes.router)
 app.include_router(seed_routes.router)
+app.include_router(company_routes.router)
+app.include_router(recruiter_routes.router)

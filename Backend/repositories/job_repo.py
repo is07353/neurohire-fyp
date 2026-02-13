@@ -1,4 +1,5 @@
 """Pure DB queries for jobs (list open, seed, backfill, weightage)."""
+import json
 import asyncpg
 
 
@@ -21,7 +22,6 @@ async def list_open_jobs(pool: asyncpg.Pool) -> list[dict]:
                 company_name,
                 branch_name,
                 job_description,
-                eligibility_text,
                 status,
                 skills,
                 minimum_experience_years,
@@ -43,7 +43,6 @@ async def list_open_jobs(pool: asyncpg.Pool) -> list[dict]:
             "company_name": r["company_name"] or "",
             "branch_name": r["branch_name"] or "",
             "job_description": r["job_description"],
-            "eligibility_text": r["eligibility_text"],
             "status": r["status"],
             "location": r["location"] or "",
             "type": "Full-time",
@@ -144,6 +143,14 @@ async def seed_jobs(pool: asyncpg.Pool) -> dict:
         for title, desc, location, work_mode, company_name, branch_name, rest in _SAMPLE_JOBS:
             salary, min_exp, skills, other_req, cv_w, vid_w = rest
             _validate_weightage_sum_100(cv_w, vid_w)
+            # Build JSON job_description combining title, skills, and other requirements
+            job_description = json.dumps(
+                {
+                    "job_title": title,
+                    "skills": skills,
+                    "other_requirements": other_req,
+                }
+            )
             await conn.execute(
                 """
                 INSERT INTO jobs (
@@ -157,7 +164,7 @@ async def seed_jobs(pool: asyncpg.Pool) -> dict:
                 title,
                 company_name,
                 branch_name,
-                desc,
+                job_description,
                 skills,
                 min_exp,
                 other_req,
@@ -208,3 +215,132 @@ async def set_one_job_weightage_75_25(pool: asyncpg.Pool) -> dict | None:
             """
         )
     return dict(row) if row else None
+
+
+async def create_job(
+    pool: asyncpg.Pool,
+    *,
+    recruiter_id: int,
+    job_title: str,
+    company_name: str,
+    branch_name: str,
+    job_description: str,
+    location: str,
+    work_mode: str,
+    salary_monthly_pkr: int,
+    minimum_experience_years: int,
+    skills: list[str],
+    other_requirements: str,
+    cv_score_weightage: int,
+    video_score_weightage: int,
+) -> dict:
+    """Insert a new job row."""
+    _validate_weightage_sum_100(cv_score_weightage, video_score_weightage)
+
+    # Build JSON job_description combining title, skills, and other requirements
+    job_description = json.dumps(
+        {
+            "job_title": job_title,
+            "skills": skills,
+            "other_requirements": other_requirements,
+        }
+    )
+
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            INSERT INTO jobs (
+                recruiter_id,
+                job_title,
+                company_name,
+                branch_name,
+                job_description,
+                status,
+                skills,
+                minimum_experience_years,
+                other_requirements,
+                location,
+                work_mode,
+                salary_monthly_pkr,
+                cv_score_weightage,
+                video_score_weightage
+            )
+            VALUES ($1, $2, $3, $4, $5, 'open', $6, $7, $8, $9, $10, $11, $12, $13)
+            RETURNING
+                job_id,
+                job_title,
+                company_name,
+                branch_name,
+                location,
+                status,
+                salary_monthly_pkr,
+                cv_score_weightage,
+                video_score_weightage;
+            """,
+            recruiter_id,
+            job_title,
+            company_name,
+            branch_name,
+            job_description,
+            skills,
+            minimum_experience_years,
+            other_requirements,
+            location,
+            work_mode,
+            salary_monthly_pkr,
+            cv_score_weightage,
+            video_score_weightage,
+        )
+
+    return dict(row)
+
+
+async def insert_job_questions(
+    pool: asyncpg.Pool,
+    *,
+    job_id: int,
+    questions: list[str],
+) -> None:
+    """Insert job-specific video questions for a job_id."""
+    # Clean up any empty questions
+    cleaned = [q.strip() for q in questions if q and q.strip()]
+    if not cleaned:
+        return
+
+    async with pool.acquire() as conn:
+        await conn.executemany(
+            "INSERT INTO job_questions (job_id, question_text) VALUES ($1, $2);",
+            [(job_id, q) for q in cleaned],
+        )
+
+
+async def list_jobs_for_recruiter(pool: asyncpg.Pool, recruiter_id: int) -> list[dict]:
+    """List all jobs created by a specific recruiter."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT
+                job_id,
+                job_title,
+                location,
+                status,
+                salary_monthly_pkr,
+                cv_score_weightage,
+                video_score_weightage
+            FROM jobs
+            WHERE recruiter_id = $1
+            ORDER BY created_at DESC, job_id DESC;
+            """,
+            recruiter_id,
+        )
+    return [
+        {
+            "id": str(r["job_id"]),
+            "title": r["job_title"],
+            "location": r["location"] or "",
+            "status": r["status"],
+            "cv_score_weightage": r["cv_score_weightage"],
+            "video_score_weightage": r["video_score_weightage"],
+        }
+        for r in rows
+    ]
