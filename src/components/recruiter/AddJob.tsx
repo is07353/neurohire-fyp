@@ -8,6 +8,10 @@ interface AddJobProps {
   onLogout: () => void;
 }
 
+const API_BASE =
+  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
+  'http://127.0.0.1:8000';
+
 export function AddJob({ recruiterName, onBack, onLogout }: AddJobProps) {
   const [title, setTitle] = useState('');
   const [companyName, setCompanyName] = useState('');
@@ -19,13 +23,12 @@ export function AddJob({ recruiterName, onBack, onLogout }: AddJobProps) {
   const [otherRequirements, setOtherRequirements] = useState('');
   const [workMode, setWorkMode] = useState<string[]>([]);
   const [salary, setSalary] = useState('');
-  const [questions, setQuestions] = useState([
-    'Tell us about yourself and why you want to work with us.',
-    'Describe a time when you helped a customer or colleague.',
-  ]);
+  const [questions, setQuestions] = useState(['']);
   const [cvWeight, setCvWeight] = useState(40);
   const [videoWeight, setVideoWeight] = useState(60);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   // Get initials from recruiter name
   const getInitials = (name: string) => {
@@ -82,10 +85,58 @@ export function AddJob({ recruiterName, onBack, onLogout }: AddJobProps) {
     setQuestions(newQuestions);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('New job:', { title, companyName, branchName, location, skills, minExperience, otherRequirements, workMode, salary, questions, cvWeight, videoWeight });
-    onBack();
+    if (submitting) return;
+    setSubmitError(null);
+
+    if (cvWeight + videoWeight !== 100) {
+      setSubmitError('CV and Video weightage must sum to 100%.');
+      return;
+    }
+
+    if (workMode.length === 0) {
+      setSubmitError('Please select at least one work mode.');
+      return;
+    }
+
+    const salaryNumber = Number(salary);
+    if (Number.isNaN(salaryNumber) || salaryNumber <= 0) {
+      setSubmitError('Salary must be a positive number.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const res = await fetch(`${API_BASE}/recruiter/jobs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          companyName,
+          branchName,
+          location,
+          skills,
+          minExperience,
+          otherRequirements,
+          workMode,
+          salary: salaryNumber,
+          cvWeight,
+          videoWeight,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { detail?: string };
+        throw new Error(data.detail || `Failed to create job (${res.status})`);
+      }
+
+      onBack();
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Failed to create job');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -358,6 +409,7 @@ engineering is required."
                       onChange={(e) => updateQuestion(index, e.target.value)}
                       rows={2}
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-[#000000] transition-colors resize-none"
+                      placeholder="Type the video interview question here"
                       required
                     />
                   </div>
@@ -438,11 +490,17 @@ engineering is required."
             </button>
             <button
               type="submit"
-              className="flex-1 bg-[#000000] text-white py-3 px-6 rounded-lg hover:bg-gray-800 transition-all font-medium"
+              disabled={submitting}
+              className="flex-1 bg-[#000000] text-white py-3 px-6 rounded-lg hover:bg-gray-800 transition-all font-medium disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed"
             >
-              Post Job
+              {submitting ? 'Posting Job…' : 'Post Job'}
             </button>
           </div>
+          {submitError && (
+            <p className="text-red-500 text-sm pt-2">
+              {submitError}
+            </p>
+          )}
         </form>
       </div>
     </div>

@@ -7,20 +7,46 @@ interface CompanyLoginProps {
   onSignUp: () => void;
 }
 
+const API_BASE =
+  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
+  'http://127.0.0.1:8000';
+
 export function CompanyLogin({ onLogin, onBack, onSignUp }: CompanyLoginProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
   const [resetSent, setResetSent] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loggingIn, setLoggingIn] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const emailValid = emailRegex.test(email);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (email && password) {
-      // Mock login - extract company name from email
-      const companyName = email.split('@')[1]?.split('.')[0] || 'Company';
-      const formattedName = companyName.charAt(0).toUpperCase() + companyName.slice(1);
-      onLogin(formattedName);
+    if (!email || !password || !emailValid || loggingIn) return;
+    setLoginError(null);
+    setLoggingIn(true);
+    try {
+      const res = await fetch(`${API_BASE}/company/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { detail?: string };
+        throw new Error(data.detail || 'Login failed');
+      }
+
+      const data = (await res.json()) as { companyName?: string };
+      const name = data.companyName || email.split('@')[0] || 'Company';
+      onLogin(name);
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : 'Failed to log in');
+    } finally {
+      setLoggingIn(false);
     }
   };
 
@@ -63,10 +89,19 @@ export function CompanyLogin({ onLogin, onBack, onSignUp }: CompanyLoginProps) {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-[#FF13F0] transition-colors text-base"
+                  className={`w-full px-4 py-3 border-2 rounded-lg focus:outline-none transition-colors text-base ${
+                    email && !emailValid
+                      ? 'border-red-500 focus:border-red-500'
+                      : 'border-gray-300 focus:border-[#FF13F0]'
+                  }`}
                   placeholder="company@email.com"
                   required
                 />
+                {email && !emailValid && (
+                  <p className="text-red-500 text-sm mt-1">
+                    Enter a valid email address
+                  </p>
+                )}
               </div>
               
               <div>
@@ -92,11 +127,18 @@ export function CompanyLogin({ onLogin, onBack, onSignUp }: CompanyLoginProps) {
                 </div>
               </div>
               
+              {loginError && (
+                <p className="text-red-500 text-sm">
+                  {loginError}
+                </p>
+              )}
+
               <button
                 type="submit"
-                className="w-full bg-[#000000] text-white py-3 px-6 rounded-lg text-lg font-medium hover:bg-[#333333] transition-all"
+                className="w-full bg-[#000000] text-white py-3 px-6 rounded-lg text-lg font-medium hover:bg-[#333333] transition-all disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed"
+                disabled={loggingIn}
               >
-                Login
+                {loggingIn ? 'Logging in…' : 'Login'}
               </button>
             </form>
 

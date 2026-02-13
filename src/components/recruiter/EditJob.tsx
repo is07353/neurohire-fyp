@@ -21,10 +21,7 @@ export function EditJob({ job, recruiterName, onBack, onLogout }: EditJobProps) 
   const [otherRequirements, setOtherRequirements] = useState('');
   const [workMode, setWorkMode] = useState<string[]>(['Onsite']);
   const [salary, setSalary] = useState('50000');
-  const [questions, setQuestions] = useState([
-    'Tell us about yourself and why you want to work with us.',
-    'Describe a time when you helped a customer or colleague.',
-  ]);
+  const [questions, setQuestions] = useState(['']);
   const [cvWeight, setCvWeight] = useState(job.cvWeight);
   const [videoWeight, setVideoWeight] = useState(job.videoWeight);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -360,6 +357,7 @@ engineering is required."
                       onChange={(e) => updateQuestion(index, e.target.value)}
                       rows={2}
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-[#000000] transition-colors resize-none"
+                      placeholder="Type the video interview question here"
                       required
                     />
                   </div>

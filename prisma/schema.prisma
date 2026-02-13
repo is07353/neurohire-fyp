@@ -17,6 +17,26 @@ enum WorkMode {
   REMOTE
 }
 
+model companies {
+  company_id          Int       @id @default(autoincrement())
+  company_name        String
+  company_description String
+  industry            String
+  website_url         String?
+
+  contact_email       String    @unique
+  contact_person_name String
+  contact_phone       String
+
+  // Store a hash here, never the raw password
+  password_hash       String
+
+  created_at          DateTime  @default(now())
+
+  // One company can have many recruiters
+  recruiters          recruiters[]
+}
+
 model admins {
   admin_id      Int          @id @default(autoincrement())
   full_name     String
@@ -27,12 +47,19 @@ model admins {
 }
 
 model ai_assessments {
-  assessment_id          Int                    @id @default(autoincrement())
-  application_id         Int                    @unique
-  total_score            Int?
-  ai_recommendation      String?
-  reason_summary         String?
-  candidate_applications candidate_applications @relation(fields: [application_id], references: [application_id], onDelete: Cascade)
+  assessment_id           Int                    @id @default(autoincrement())
+  application_id          Int                    @unique
+
+  // CV–JD specific outputs
+  cv_score                Int?
+  cv_recommendation       String?
+  cv_matching_analysis    String?
+  cv_reason_summary       String?
+
+  // Full raw JSON output from the CV–JD model
+  cv_jd_output            Json?
+
+  candidate_applications  candidate_applications @relation(fields: [application_id], references: [application_id], onDelete: Cascade)
 
   @@index([application_id])
 }
@@ -118,10 +145,10 @@ model jobs {
   job_title              String
   company_name           String                   @default("")
   branch_name            String                   @default("")
-  job_description        String
+  // Store structured JSON with job_title, skills, other_requirements
+  job_description        Json
   created_at             DateTime                 @default(now())
   updated_at             DateTime                 @default(now()) @updatedAt
-  eligibility_text       String?
   status                 String                   @default("open")
 
   // New job-detail fields (defaults for backward compatibility with existing rows)
@@ -164,10 +191,23 @@ model recruiter_logs {
 
 model recruiters {
   recruiter_id        Int                   @id @default(autoincrement())
+
+  // Link to the owning company
+  company_id          Int?
+  companies           companies?            @relation(fields: [company_id], references: [company_id], onDelete: Cascade)
+
   full_name           String
   email               String                @unique
   password_hash       String
   role                String                @default("recruiter")
+
+  // Optional username and employee ID for login/identification inside a company
+  username            String?               @unique
+  employee_id         String?               @unique
+
+  // Recruiter account status: 'pending' | 'approved' | 'disabled'
+  status              String                @default("pending")
+
   created_at          DateTime              @default(now())
   jobs                jobs[]
   recruiter_decisions recruiter_decisions[]

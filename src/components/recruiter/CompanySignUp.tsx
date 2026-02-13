@@ -17,6 +17,10 @@ export interface CompanySignUpData {
   password: string;
 }
 
+const API_BASE =
+  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
+  'http://127.0.0.1:8000';
+
 export function CompanySignUp({ onSignUp, onBackToLogin }: CompanySignUpProps) {
   const [companyName, setCompanyName] = useState('');
   const [companyDescription, setCompanyDescription] = useState('');
@@ -31,7 +35,13 @@ export function CompanySignUp({ onSignUp, onBackToLogin }: CompanySignUpProps) {
   const [termsExpanded, setTermsExpanded] = useState(false);
   const [privacyExpanded, setPrivacyExpanded] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const emailValid = emailRegex.test(contactEmail);
+
+  const passwordStrong = password.length >= 8;
   const passwordsMatch = password === confirmPassword && password.length > 0;
   
   // Determine the final industry value
@@ -42,17 +52,43 @@ export function CompanySignUp({ onSignUp, onBackToLogin }: CompanySignUpProps) {
     companyDescription.trim() !== '' &&
     finalIndustry.trim() !== '' &&
     contactEmail.trim() !== '' &&
+    emailValid &&
     contactPersonName.trim() !== '' &&
     contactPhone.trim() !== '' &&
     password.trim() !== '' &&
+    passwordStrong &&
     passwordsMatch &&
     agreedToTerms;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isFormValid) {
+    if (!isFormValid || submitting) return;
+    setSubmitError(null);
+    setSubmitting(true);
+    try {
+      const res = await fetch(`${API_BASE}/company/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyName,
+          companyDescription,
+          industry: finalIndustry,
+          websiteUrl: websiteUrl.trim() || undefined,
+          contactEmail,
+          contactPersonName,
+          contactPhone,
+          password,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { detail?: string };
+        throw new Error(data.detail || `Sign up failed (${res.status})`);
+      }
+
+      const data = (await res.json()) as { companyName?: string };
       onSignUp({
-        companyName,
+        companyName: data.companyName || companyName,
         companyDescription,
         industry: finalIndustry,
         websiteUrl: websiteUrl.trim() || undefined,
@@ -61,6 +97,10 @@ export function CompanySignUp({ onSignUp, onBackToLogin }: CompanySignUpProps) {
         contactPhone,
         password,
       });
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Failed to create company account');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -208,11 +248,18 @@ export function CompanySignUp({ onSignUp, onBackToLogin }: CompanySignUpProps) {
                     type="email"
                     value={contactEmail}
                     onChange={(e) => setContactEmail(e.target.value)}
-                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-[#FF13F0] transition-colors text-base"
+                    className={`w-full px-4 py-3 border-2 rounded-lg focus:outline-none transition-colors text-base ${
+                      contactEmail && !emailValid
+                        ? 'border-red-500 focus:border-red-500'
+                        : 'border-gray-300 focus:border-[#FF13F0]'
+                    }`}
                     placeholder="contact@company.com"
                     required
                   />
                   <p className="text-sm text-gray-500 mt-1">This email will be used for logging in</p>
+                  {contactEmail && !emailValid && (
+                    <p className="text-red-500 text-sm mt-1">Enter a valid email address (e.g. name@company.com)</p>
+                  )}
                 </div>
 
                 <div>
@@ -247,10 +294,19 @@ export function CompanySignUp({ onSignUp, onBackToLogin }: CompanySignUpProps) {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-[#FF13F0] transition-colors text-base"
+                  className={`w-full px-4 py-3 border-2 rounded-lg focus:outline-none transition-colors text-base ${
+                    password && !passwordStrong
+                      ? 'border-red-500 focus:border-red-500'
+                      : 'border-gray-300 focus:border-[#FF13F0]'
+                  }`}
                   placeholder="Create a strong password"
                   required
                 />
+                {password && !passwordStrong && (
+                  <p className="text-red-500 text-sm mt-1">
+                    Password must be at least 8 characters long
+                  </p>
+                )}
               </div>
 
               <div>
@@ -377,17 +433,24 @@ export function CompanySignUp({ onSignUp, onBackToLogin }: CompanySignUpProps) {
             </div>
           </div>
 
+          {/* Error message */}
+          {submitError && (
+            <p className="text-red-500 text-sm mb-2">
+              {submitError}
+            </p>
+          )}
+
           {/* Create Account Button */}
           <button
             type="submit"
-            disabled={!isFormValid}
+            disabled={!isFormValid || submitting}
             className={`w-full py-3 px-6 rounded-lg text-lg font-medium transition-all ${
-              isFormValid
+              isFormValid && !submitting
                 ? 'bg-[#000000] text-white hover:bg-[#333333] cursor-pointer'
                 : 'bg-gray-300 text-gray-500 cursor-not-allowed'
             }`}
           >
-            Create Company Account
+            {submitting ? 'Creating Account…' : 'Create Company Account'}
           </button>
 
           {/* Secondary Navigation */}

@@ -1,66 +1,76 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Search, Grid, LogOut, Edit, MoreVertical, BarChart3 } from 'lucide-react';
 import { Job } from '../../App';
 import { RecruiterOverview } from './RecruiterOverview';
 
 interface RecruiterDashboardProps {
   recruiterName: string;
+  recruiterId: number | null;
   onLogout: () => void;
   onViewApplicants: (job: Job) => void;
   onEditJob: (job: Job) => void;
   onAddJob: () => void;
 }
 
-const mockJobs: Job[] = [
-  {
-    id: '1',
-    title: 'Store Worker – Branch 1',
-    location: 'Gulberg, Lahore',
-    applicantCount: 24,
-    cvWeight: 40,
-    videoWeight: 60,
-    status: 'open',
-  },
-  {
-    id: '2',
-    title: 'Cashier – DHA Branch',
-    location: 'DHA, Karachi',
-    applicantCount: 18,
-    cvWeight: 50,
-    videoWeight: 50,
-    status: 'open',
-  },
-  {
-    id: '3',
-    title: 'Delivery Rider – F-7',
-    location: 'F-7, Islamabad',
-    applicantCount: 32,
-    cvWeight: 30,
-    videoWeight: 70,
-    status: 'closed',
-  },
-  {
-    id: '4',
-    title: 'Store Worker – Saddar',
-    location: 'Saddar, Rawalpindi',
-    applicantCount: 15,
-    cvWeight: 40,
-    videoWeight: 60,
-    status: 'open',
-  },
-];
+const API_BASE =
+  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
+  'http://127.0.0.1:8000';
 
 export function RecruiterDashboard({
   recruiterName,
+  recruiterId,
   onLogout,
   onViewApplicants,
   onEditJob,
   onAddJob,
 }: RecruiterDashboardProps) {
-  const [jobs, setJobs] = useState<Job[]>(mockJobs);
+  const [jobs, setJobs] = useState<Job[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<'overview' | 'my-jobs'>('overview');
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadJobs = async () => {
+      if (!recruiterId) return;
+      try {
+        const res = await fetch(`${API_BASE}/recruiter/jobs?recruiter_id=${recruiterId}`);
+        if (!res.ok) {
+          // eslint-disable-next-line no-console
+          console.error('Failed to load recruiter jobs', res.status);
+          return;
+        }
+        const data = (await res.json()) as Array<{
+          id: string;
+          title: string;
+          location: string;
+          status: string;
+          cvWeight: number;
+          videoWeight: number;
+          applicantCount: number;
+        }>;
+        if (!cancelled) {
+          const mapped: Job[] = data.map((j) => ({
+            id: j.id,
+            title: j.title,
+            location: j.location,
+            status: (j.status === 'closed' ? 'closed' : 'open') as 'open' | 'closed',
+            cvWeight: j.cvWeight,
+            videoWeight: j.videoWeight,
+            applicantCount: j.applicantCount ?? 0,
+          }));
+          setJobs(mapped);
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('Error loading recruiter jobs', err);
+      }
+    };
+    loadJobs();
+    return () => {
+      cancelled = true;
+    };
+  }, [recruiterId]);
 
   const handleToggleStatus = (jobId: string) => {
     setJobs(jobs.map(job => 
