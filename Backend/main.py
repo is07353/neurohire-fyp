@@ -9,7 +9,7 @@ _backend_dir = Path(__file__).resolve().parent
 if str(_backend_dir) not in sys.path:
     sys.path.insert(0, str(_backend_dir))
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import create_pool
@@ -29,6 +29,26 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     app.state.db_pool = await create_pool()
+
+
+@app.get("/health")
+def health():
+    """Lightweight health check (no DB). Use to verify backend is up."""
+    return {"status": "ok"}
+
+
+@app.get("/health/ready")
+async def health_ready(request: Request):
+    """Readiness: check DB connection. Slightly slower but confirms DB is reachable."""
+    pool = getattr(request.app.state, "db_pool", None)
+    if not pool:
+        return {"status": "no pool"}, 503
+    try:
+        async with pool.acquire() as conn:
+            await conn.fetchval("SELECT 1")
+    except Exception:
+        return {"status": "db error"}, 503
+    return {"status": "ok"}
 
 
 @app.on_event("shutdown")

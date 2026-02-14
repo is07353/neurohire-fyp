@@ -2,7 +2,7 @@
 import asyncpg
 from fastapi import APIRouter, Request, Depends
 
-from repositories import job_repo
+from repositories import job_repo, application_repo
 
 router = APIRouter(prefix="/seed", tags=["seed"])
 
@@ -34,3 +34,9 @@ async def set_one_job_weightage_75_25(pool: asyncpg.Pool = Depends(get_db_pool))
         "message": "Updated one job to 75% CV / 25% Video",
         "job": row,
     }
+
+
+@router.post("/ai-assessments-dummy")
+async def seed_ai_assessments_dummy(pool: asyncpg.Pool = Depends(get_db_pool)):
+    """Insert dummy ai_assessments for every candidate_application that has none. Use so Candidate Review shows real DB data."""
+    return await application_repo.seed_dummy_ai_assessments_for_all_applications(pool)

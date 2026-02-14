@@ -65,6 +65,13 @@ model ai_assessments {
   // Average of cv_score and video_score (weighted by job weightage can be applied in app)
   total_score             Int?
 
+  // Speech / video interview LLM outputs (application-level aggregates or summary)
+  confidence_score        Int?
+  clarity                 Int?
+  answer_relevance        Int?
+  speech_analysis        String?
+  speech_llm_output      Json?
+
   candidate_applications  candidate_applications @relation(fields: [application_id], references: [application_id], onDelete: Cascade)
 
   @@index([application_id])

@@ -76,6 +76,22 @@ async def list_candidate_jobs(pool: asyncpg.Pool = Depends(get_db_pool)):
     return await job_repo.list_open_jobs(pool)
 
 
+@router.get("/candidate/jobs/{job_id}/questions")
+async def get_job_questions(job_id: str, pool: asyncpg.Pool = Depends(get_db_pool)):
+    """Return video interview questions for the given job (from job_questions table). Used by candidate flow."""
+    try:
+        jid = int(job_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid job_id")
+    job = await job_repo.get_job_by_id(pool, job_id=jid)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    # Only expose questions for open jobs
+    if job.get("status") != "open":
+        raise HTTPException(status_code=404, detail="Job not found")
+    return {"questions": job.get("questions") or []}
+
+
 @router.get("/candidate/overview")
 def candidate_overview():
     """Placeholder candidate overview (e.g. from CV)."""

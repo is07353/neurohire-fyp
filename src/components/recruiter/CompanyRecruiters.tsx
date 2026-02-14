@@ -180,7 +180,6 @@ export function CompanyRecruiters({ companyName }: CompanyRecruitersProps) {
                 <th className="text-left px-6 py-4 text-sm font-medium text-gray-700">Recruiter</th>
                 <th className="text-left px-6 py-4 text-sm font-medium text-gray-700">Employee ID</th>
                 <th className="text-left px-6 py-4 text-sm font-medium text-gray-700">Role</th>
-                <th className="text-left px-6 py-4 text-sm font-medium text-gray-700">Activity</th>
                 <th className="text-left px-6 py-4 text-sm font-medium text-gray-700">Status</th>
                 <th className="text-left px-6 py-4 text-sm font-medium text-gray-700">Actions</th>
               </tr>
@@ -209,14 +208,6 @@ export function CompanyRecruiters({ companyName }: CompanyRecruitersProps) {
                   {/* Role */}
                   <td className="px-6 py-4">
                     <span className="text-sm text-gray-700">{recruiter.role}</span>
-                  </td>
-
-                  {/* Activity */}
-                  <td className="px-6 py-4">
-                    <div className="text-sm">
-                      <p className="text-gray-700">{recruiter.jobsPosted} jobs</p>
-                      <p className="text-gray-500">{recruiter.totalApplicants} applicants</p>
-                    </div>
                   </td>
 
                   {/* Status */}

@@ -228,6 +228,7 @@ export function CandidateDashboard({ onBackToLanding }: CandidateDashboardProps)
           {currentStep === 5 && (
             <VideoInterview
               language={language}
+              jobId={selectedJob?.id ?? null}
               onComplete={handleVideoComplete}
             />
           )}

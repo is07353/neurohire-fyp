@@ -35,3 +35,17 @@ async def insert_cv_metadata(
 
     return dict(row)
 
+
+async def get_cv_for_application(pool: asyncpg.Pool, application_id: int) -> dict | None:
+    """Get CV URL and metadata for an application (for Candidate Review preview/download)."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT cv_url, mime_type
+            FROM cv_data
+            WHERE application_id = $1;
+            """,
+            application_id,
+        )
+    return dict(row) if row and row.get("cv_url") else None
+
