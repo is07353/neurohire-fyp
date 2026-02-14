@@ -3,7 +3,7 @@ import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Request, Query, status
 from pydantic import BaseModel, EmailStr
 
-from repositories import recruiter_repo, job_repo, application_repo
+from repositories import recruiter_repo, job_repo, application_repo, cv_repo, video_repo
 
 router = APIRouter(prefix="/recruiter", tags=["recruiter"])
 
@@ -275,6 +275,95 @@ async def list_job_applicants(
     )
     for r in rows
   ]
+
+
+class ApplicationReviewResponse(BaseModel):
+  """Full ai_assessments data for Candidate Review page (frontend -> DBMS mapping)."""
+  cv_score: int | None
+  cv_matching_analysis: str | None
+  cv_reason_summary: str | None
+  video_score: int | None
+  confidence_score: int | None
+  clarity: int | None
+  answer_relevance: int | None
+  speech_analysis: str | None
+
+
+@router.get("/applications/{application_id}/review", response_model=ApplicationReviewResponse | None)
+async def get_application_review(
+  application_id: int,
+  pool: asyncpg.Pool = Depends(get_db_pool),
+):
+  """Get ai_assessments data for the Candidate Review page. Returns null if no assessment exists."""
+  row = await application_repo.get_ai_assessment_for_application(pool, application_id=application_id)
+  if not row:
+    return None
+  return ApplicationReviewResponse(
+    cv_score=row.get("cv_score"),
+    cv_matching_analysis=row.get("cv_matching_analysis"),
+    cv_reason_summary=row.get("cv_reason_summary"),
+    video_score=row.get("video_score"),
+    confidence_score=row.get("confidence_score"),
+    clarity=row.get("clarity"),
+    answer_relevance=row.get("answer_relevance"),
+    speech_analysis=row.get("speech_analysis"),
+  )
+
+
+@router.get("/jobs/{job_id}/questions")
+async def get_job_questions(
+  job_id: int,
+  pool: asyncpg.Pool = Depends(get_db_pool),
+):
+  """Return video interview questions for this job (from job_questions). For Candidate Review."""
+  questions = await job_repo.get_job_questions_only(pool, job_id=job_id)
+  return {"questions": questions}
+
+
+@router.get("/applications/{application_id}/video-submissions")
+async def get_application_video_submissions(
+  application_id: int,
+  pool: asyncpg.Pool = Depends(get_db_pool),
+):
+  """List video submissions for an application (question_index, question_text, video_url, video_score). For Candidate Review."""
+  rows = await video_repo.list_by_application(pool, application_id=application_id)
+  return {"submissions": rows}
+
+
+@router.get("/applications/{application_id}/cv")
+async def get_application_cv(
+  application_id: int,
+  pool: asyncpg.Pool = Depends(get_db_pool),
+):
+  """Get CV URL for this application (for Candidate Review preview and download). Returns null if no CV."""
+  row = await cv_repo.get_cv_for_application(pool, application_id=application_id)
+  if not row:
+    return {"cv_url": None}
+  return {"cv_url": row.get("cv_url"), "mime_type": row.get("mime_type")}
+
+
+class RecruiterDecisionPayload(BaseModel):
+  decision: str  # "accept" | "reject" | "interview"
+
+
+@router.post("/applications/{application_id}/decision")
+async def record_recruiter_decision(
+  application_id: int,
+  payload: RecruiterDecisionPayload,
+  pool: asyncpg.Pool = Depends(get_db_pool),
+):
+  """Save recruiter action to candidate_applications.status and recruiter_decisions. decision: accept | reject | interview."""
+  if payload.decision not in ("accept", "reject", "interview"):
+    raise HTTPException(
+      status_code=status.HTTP_400_BAD_REQUEST,
+      detail="decision must be one of: accept, reject, interview",
+    )
+  result = await application_repo.record_recruiter_decision(
+    pool, application_id=application_id, decision=payload.decision
+  )
+  if not result:
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+  return result
 
 
 class UpdateJobPayload(BaseModel):

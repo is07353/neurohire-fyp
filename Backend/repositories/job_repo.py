@@ -357,39 +357,59 @@ async def get_job_by_id(pool: asyncpg.Pool, job_id: int) -> dict | None:
         )
         
         questions = [r["question_text"] for r in question_rows]
-        
-        # Parse job_description JSON if it exists
-        job_desc = job_row["job_description"]
-        if isinstance(job_desc, dict):
-            other_req = job_desc.get("other_requirements", job_row["other_requirements"] or "")
-        else:
-            other_req = job_row["other_requirements"] or ""
-        
-        # Convert work_mode from DB format ("ONSITE"/"REMOTE") to UI format ("Onsite"/"Remote")
-        work_mode_ui = []
-        if job_row["work_mode"]:
-            if job_row["work_mode"] == "ONSITE":
-                work_mode_ui = ["Onsite"]
-            elif job_row["work_mode"] == "REMOTE":
-                work_mode_ui = ["Remote"]
-        
-        return {
-            "id": str(job_row["job_id"]),
-            "recruiter_id": job_row["recruiter_id"],
-            "title": job_row["job_title"],
-            "company_name": job_row["company_name"] or "",
-            "branch_name": job_row["branch_name"] or "",
-            "location": job_row["location"] or "",
-            "status": job_row["status"],
-            "skills": list(job_row["skills"]) if job_row["skills"] else [],
-            "minExperience": job_row["minimum_experience_years"] or 0,
-            "otherRequirements": other_req,
-            "workMode": work_mode_ui,
-            "salary": job_row["salary_monthly_pkr"] or 0,
-            "cv_score_weightage": job_row["cv_score_weightage"],
-            "video_score_weightage": job_row["video_score_weightage"],
-            "questions": questions,
-        }
+
+        return _job_row_to_dict(job_row, questions)
+
+    return None
+
+
+async def get_job_questions_only(pool: asyncpg.Pool, job_id: int) -> list[str]:
+    """Return ordered list of question text for a job (for Candidate Review video section)."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT question_text
+            FROM job_questions
+            WHERE job_id = $1
+            ORDER BY question_id;
+            """,
+            job_id,
+        )
+    return [r["question_text"] for r in rows]
+
+
+def _job_row_to_dict(job_row, questions: list[str]) -> dict:
+    """Build job dict from DB row and questions list."""
+    job_desc = job_row["job_description"]
+    if isinstance(job_desc, dict):
+        other_req = job_desc.get("other_requirements", job_row["other_requirements"] or "")
+    else:
+        other_req = job_row["other_requirements"] or ""
+
+    work_mode_ui = []
+    if job_row["work_mode"]:
+        if job_row["work_mode"] == "ONSITE":
+            work_mode_ui = ["Onsite"]
+        elif job_row["work_mode"] == "REMOTE":
+            work_mode_ui = ["Remote"]
+
+    return {
+        "id": str(job_row["job_id"]),
+        "recruiter_id": job_row["recruiter_id"],
+        "title": job_row["job_title"],
+        "company_name": job_row["company_name"] or "",
+        "branch_name": job_row["branch_name"] or "",
+        "location": job_row["location"] or "",
+        "status": job_row["status"],
+        "skills": list(job_row["skills"]) if job_row["skills"] else [],
+        "minExperience": job_row["minimum_experience_years"] or 0,
+        "otherRequirements": other_req,
+        "workMode": work_mode_ui,
+        "salary": job_row["salary_monthly_pkr"] or 0,
+        "cv_score_weightage": job_row["cv_score_weightage"],
+        "video_score_weightage": job_row["video_score_weightage"],
+        "questions": questions,
+    }
 
 
 async def update_job_questions(
@@ -413,6 +433,43 @@ async def update_job_questions(
                 "INSERT INTO job_questions (job_id, question_text) VALUES ($1, $2);",
                 [(job_id, q) for q in cleaned],
             )
+
+
+async def list_jobs_for_company(pool: asyncpg.Pool, company_name: str) -> list[dict]:
+    """List all jobs posted by recruiters belonging to this company (by company name). Jobs only, no applicant counts."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT
+                j.job_id,
+                j.job_title,
+                j.company_name,
+                j.location,
+                j.status,
+                j.salary_monthly_pkr,
+                j.created_at,
+                r.full_name AS recruiter_name
+            FROM jobs j
+            INNER JOIN recruiters r ON r.recruiter_id = j.recruiter_id
+            INNER JOIN companies c ON c.company_id = r.company_id
+            WHERE LOWER(TRIM(c.company_name)) = LOWER(TRIM($1))
+            ORDER BY j.created_at DESC, j.job_id DESC;
+            """,
+            company_name,
+        )
+    return [
+        {
+            "id": str(r["job_id"]),
+            "title": r["job_title"],
+            "company_name": r["company_name"] or "",
+            "location": r["location"] or "",
+            "status": r["status"],
+            "salary_monthly_pkr": r["salary_monthly_pkr"] or 0,
+            "created_at": r["created_at"],
+            "recruiter_name": r["recruiter_name"] or "Recruiter",
+        }
+        for r in rows
+    ]
 
 
 async def list_jobs_for_recruiter(pool: asyncpg.Pool, recruiter_id: int) -> list[dict]:

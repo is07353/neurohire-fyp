@@ -5,21 +5,9 @@ import { useUploadThing } from '../../lib/uploadthing';
 
 interface VideoInterviewProps {
   language: Language;
+  jobId: string | null;
   onComplete: () => void;
 }
-
-const questionsData = {
-  english: [
-    'Tell us about yourself and why you want to work with us.',
-    'Describe a time when you helped a customer or colleague.',
-    'What would you do if you faced a difficult situation at work?',
-  ],
-  urdu: [
-    'اپنے بارے میں بتائیں اور آپ ہمارے ساتھ کیوں کام کرنا چاہتے ہیں۔',
-    'ایک وقت بیان کریں جب آپ نے کسی گاہک یا ساتھی کی مدد کی۔',
-    'اگر آپ کو کام پر کسی مشکل صورتحال کا سامنا ہو تو آپ کیا کریں گے؟',
-  ],
-};
 
 const translations = {
   english: {
@@ -56,10 +44,45 @@ const API_BASE =
   (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
   'http://127.0.0.1:8000';
 
-export function VideoInterview({ language, onComplete }: VideoInterviewProps) {
+export function VideoInterview({ language, jobId, onComplete }: VideoInterviewProps) {
   const t = translations[language || 'english'];
-  const questions = questionsData[language || 'english'];
-  
+  const [questions, setQuestions] = useState<string[]>([]);
+  const [questionsLoading, setQuestionsLoading] = useState(true);
+  const [questionsError, setQuestionsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!jobId) {
+      setQuestions([]);
+      setQuestionsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setQuestionsLoading(true);
+    setQuestionsError(null);
+    fetch(`${API_BASE}/candidate/jobs/${encodeURIComponent(jobId)}/questions`)
+      .then((res) => {
+        if (!res.ok) throw new Error(res.status === 404 ? 'No questions for this job' : 'Failed to load questions');
+        return res.json();
+      })
+      .then((data: { questions?: string[] }) => {
+        if (!cancelled) {
+          setQuestions(Array.isArray(data.questions) ? data.questions : []);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setQuestionsError(err instanceof Error ? err.message : 'Failed to load questions');
+          setQuestions([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setQuestionsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [jobId]);
+
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [recordingState, setRecordingState] = useState<RecordingState>('idle');
   const [recordingTime, setRecordingTime] = useState(0);
@@ -70,7 +93,21 @@ export function VideoInterview({ language, onComplete }: VideoInterviewProps) {
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
+  const previewUrlRef = useRef<string | null>(null);
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
+
+  const resetVideoToCamera = () => {
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
+    if (videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+      videoRef.current.src = '';
+      videoRef.current.muted = true;
+      videoRef.current.controls = false;
+    }
+  };
 
   const { startUpload, isUploading } = useUploadThing('videoUploader', {
     onClientUploadComplete: (res) => {
@@ -101,6 +138,10 @@ export function VideoInterview({ language, onComplete }: VideoInterviewProps) {
     initCamera();
 
     return () => {
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+        previewUrlRef.current = null;
+      }
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
@@ -173,7 +214,11 @@ export function VideoInterview({ language, onComplete }: VideoInterviewProps) {
 
   const handlePreview = () => {
     if (recordedBlob && videoRef.current) {
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+      }
       const url = URL.createObjectURL(recordedBlob);
+      previewUrlRef.current = url;
       videoRef.current.srcObject = null;
       videoRef.current.src = url;
       videoRef.current.muted = false;
@@ -227,11 +272,14 @@ export function VideoInterview({ language, onComplete }: VideoInterviewProps) {
     }
 
     if (currentQuestionIndex < questions.length - 1) {
+      resetVideoToCamera();
+      setRecordedBlob(null);
       setCurrentQuestionIndex(currentQuestionIndex + 1);
       setRecordingState('idle');
       setRecordingTime(0);
       setHasRecorded(false);
     } else {
+      resetVideoToCamera();
       onComplete();
     }
   };
@@ -244,6 +292,33 @@ export function VideoInterview({ language, onComplete }: VideoInterviewProps) {
 
   const currentQuestion = questions[currentQuestionIndex];
   const isLastQuestion = currentQuestionIndex === questions.length - 1;
+
+  if (questionsLoading) {
+    return (
+      <div className="py-8 text-center">
+        <h1 className="text-4xl font-medium text-[#000000] mb-3">{t.title}</h1>
+        <p className="text-lg text-gray-600">Loading interview questions...</p>
+      </div>
+    );
+  }
+
+  if (questionsError || questions.length === 0) {
+    return (
+      <div className="py-8 text-center">
+        <h1 className="text-4xl font-medium text-[#000000] mb-3">{t.title}</h1>
+        <p className="text-lg text-gray-600 mb-6">
+          {questionsError || 'No video questions are set for this job. You can continue to the next step.'}
+        </p>
+        <button
+          type="button"
+          onClick={onComplete}
+          className="py-5 px-8 rounded-lg text-xl font-medium bg-[#000000] text-white hover:bg-[#333333] transition-all"
+        >
+          Continue
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="py-8">

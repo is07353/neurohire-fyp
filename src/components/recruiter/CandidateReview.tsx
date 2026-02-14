@@ -1,6 +1,22 @@
-import { useState } from 'react';
-import { ChevronLeft, MapPin, Calendar, User, Mail, Phone, FileText, Building2, TrendingUp, CheckCircle, XCircle, ChevronDown, ArrowLeft, ChevronRight, AlertTriangle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { User, CheckCircle, XCircle, ChevronDown, ArrowLeft, AlertTriangle, Download, Brain, ChevronLeft, ChevronRight } from 'lucide-react';
 import neurohireLogo from '@/assets/neurohire-logo.png';
+import type { Applicant, Job } from '../../App';
+
+const API_BASE =
+  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
+  'http://127.0.0.1:8000';
+
+interface ReviewData {
+  cv_score: number | null;
+  cv_matching_analysis: string | null;
+  cv_reason_summary: string | null;
+  video_score: number | null;
+  confidence_score: number | null;
+  clarity: number | null;
+  answer_relevance: number | null;
+  speech_analysis: string | null;
+}
 
 interface CandidateReviewProps {
   applicant: Applicant;
@@ -21,11 +37,92 @@ export function CandidateReview({
   const [modalType, setModalType] = useState<'accept' | 'interview' | 'reject' | null>(null);
   const [showWarning, setShowWarning] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [reviewData, setReviewData] = useState<ReviewData | null>(null);
+  const [reviewLoading, setReviewLoading] = useState(true);
+  const [jobQuestions, setJobQuestions] = useState<string[]>([]);
+  const [videoSubmissions, setVideoSubmissions] = useState<Array<{ question_index: number; question_text: string; video_url: string; video_score: number | null }>>([]);
+  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
+  const [cvUrl, setCvUrl] = useState<string | null>(null);
 
-  const aiRecommendation = applicant.cvScore >= 85 && applicant.videoScore >= 85 ? 'accept' : 'interview';
+  useEffect(() => {
+    const applicationId = applicant.id;
+    if (!applicationId) {
+      setReviewLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setReviewLoading(true);
+    fetch(`${API_BASE}/recruiter/applications/${applicationId}/review`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: ReviewData | null) => {
+        if (!cancelled) setReviewData(data);
+      })
+      .catch(() => {
+        if (!cancelled) setReviewData(null);
+      })
+      .finally(() => {
+        if (!cancelled) setReviewLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [applicant.id]);
 
-  // Get initials from recruiter name
+  useEffect(() => {
+    const jobId = job?.id;
+    if (!jobId) return;
+    let cancelled = false;
+    fetch(`${API_BASE}/recruiter/jobs/${jobId}/questions`)
+      .then((res) => (res.ok ? res.json() : { questions: [] }))
+      .then((data: { questions: string[] }) => {
+        if (!cancelled) setJobQuestions(data.questions ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setJobQuestions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [job?.id]);
+
+  useEffect(() => {
+    const applicationId = applicant.id;
+    if (!applicationId) return;
+    let cancelled = false;
+    fetch(`${API_BASE}/recruiter/applications/${applicationId}/video-submissions`)
+      .then((res) => (res.ok ? res.json() : { submissions: [] }))
+      .then((data: { submissions: Array<{ question_index: number; question_text: string; video_url: string; video_score: number | null }> }) => {
+        if (!cancelled) setVideoSubmissions(data.submissions ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setVideoSubmissions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [applicant.id]);
+
+  useEffect(() => {
+    const applicationId = applicant.id;
+    if (!applicationId) return;
+    let cancelled = false;
+    fetch(`${API_BASE}/recruiter/applications/${applicationId}/cv`)
+      .then((res) => (res.ok ? res.json() : { cv_url: null }))
+      .then((data: { cv_url: string | null }) => {
+        if (!cancelled) setCvUrl(data.cv_url ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setCvUrl(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [applicant.id]);
+
+  const cvScore = reviewData?.cv_score ?? applicant.cvScore ?? 0;
+  const videoScore = reviewData?.video_score ?? applicant.videoScore ?? 0;
+  const aiRecommendation = cvScore >= 85 && videoScore >= 85 ? 'accept' : 'interview';
+
   const getInitials = (name: string) => {
     return name
       .split(' ')
@@ -35,31 +132,28 @@ export function CandidateReview({
       .substring(0, 2);
   };
 
-  // Mock interview questions and videos
-  const interviewQuestions = [
-    {
-      question: "Tell us about your previous work experience and how it relates to this delivery rider role.",
-      videoUrl: "/mock-video-1.mp4"
-    },
-    {
-      question: "How would you handle a situation where a customer is not available to receive their delivery?",
-      videoUrl: "/mock-video-2.mp4"
-    },
-    {
-      question: "What motivates you to work as a delivery rider, and what are your availability expectations?",
-      videoUrl: "/mock-video-3.mp4"
-    }
-  ];
+  const cvMatchingLines = reviewData?.cv_matching_analysis
+    ? reviewData.cv_matching_analysis.split('\n').filter((s) => s.trim())
+    : [];
 
-  // Mock CV analysis data
-  const cvAnalysis = [
-    'Experience in logistics and warehouse work is relevant to delivery riding (40%)',
-    'Lack of specific bike riding or delivery experience (30%)',
-    'Strong physical fitness aligns well with delivery work requirements (30%)',
-  ];
+  // Pair each job question (from job_questions table) with its recorded video (from video_submissions table)
+  const videoSlides =
+    jobQuestions.length > 0
+      ? jobQuestions.map((questionText, i) => ({
+          questionText,
+          submission: videoSubmissions.find((s) => s.question_index === i) ?? null,
+        }))
+      : videoSubmissions.length > 0
+        ? videoSubmissions.map((s) => ({ questionText: s.question_text, submission: s }))
+        : [{ questionText: 'No video questions for this job.', submission: null as typeof videoSubmissions[0] | null }];
 
-  // Mock model summary
-  const cvModelSummary = "The candidate's warehouse experience provides a foundation for delivery work, but lacks specific bike riding skills.";
+  const safeVideoIndex = Math.min(currentVideoIndex, Math.max(0, videoSlides.length - 1));
+  const currentSlide = videoSlides[safeVideoIndex] ?? videoSlides[0];
+  const hasMultipleSlides = videoSlides.length > 1;
+
+  useEffect(() => {
+    setCurrentVideoIndex(0);
+  }, [applicant.id, job?.id]);
 
   const handleAction = (action: 'accept' | 'interview' | 'reject') => {
     if (action !== aiRecommendation && aiRecommendation === 'accept') {
@@ -69,233 +163,303 @@ export function CandidateReview({
     setShowModal(true);
   };
 
-  const confirmAction = () => {
-    console.log(`Candidate ${modalType}: ${applicant.name}`);
-    setShowModal(false);
-    setShowWarning(false);
-    onBack();
+  const [decisionError, setDecisionError] = useState<string | null>(null);
+
+  const confirmAction = async () => {
+    if (!modalType || !applicant.id) return;
+    setDecisionError(null);
+    try {
+      const res = await fetch(`${API_BASE}/recruiter/applications/${applicant.id}/decision`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision: modalType }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { detail?: string }).detail || `Failed to save decision (${res.status})`);
+      }
+      setShowModal(false);
+      setShowWarning(false);
+      onBack();
+    } catch (e) {
+      setDecisionError(e instanceof Error ? e.message : 'Failed to save decision.');
+    }
   };
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Top Navigation Bar - No Border */}
-      <nav className="bg-white px-8 py-6">
+    <div className="min-h-screen bg-gray-50">
+      <nav className="bg-white px-8 py-6 shadow-sm">
         <div className="flex items-center justify-between">
-          {/* Left: Logo */}
           <img src={neurohireLogo} alt="neurohire" className="h-8" />
-
-          {/* Right: Dashboard Button + Avatar */}
-          <div className="flex items-center gap-4">
-            {/* Avatar with Dropdown */}
-            <div className="relative">
-              <button
-                onClick={() => setShowDropdown(!showDropdown)}
-                className="flex items-center gap-2 cursor-pointer"
-              >
-                <div className="w-10 h-10 bg-[#FF13F0] rounded-full flex items-center justify-center">
-                  <span className="text-white text-sm font-medium">{getInitials(recruiterName)}</span>
-                </div>
-                <ChevronDown className="w-4 h-4 text-gray-600" />
-              </button>
-
-              {/* Dropdown Menu */}
-              {showDropdown && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
-                  <button
-                    onClick={() => {
-                      setShowDropdown(false);
-                      onLogout();
-                    }}
-                    className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
-                  >
-                    Logout
-                  </button>
-                </div>
-              )}
-            </div>
+          <div className="relative">
+            <button
+              onClick={() => setShowDropdown(!showDropdown)}
+              className="flex items-center gap-2 cursor-pointer"
+            >
+              <div className="w-10 h-10 bg-[#FF13F0] rounded-full flex items-center justify-center">
+                <span className="text-white text-sm font-medium">{getInitials(recruiterName)}</span>
+              </div>
+              <ChevronDown className="w-4 h-4 text-gray-600" />
+            </button>
+            {showDropdown && (
+              <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
+                <button
+                  onClick={() => {
+                    setShowDropdown(false);
+                    onLogout();
+                  }}
+                  className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
+                >
+                  Logout
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </nav>
 
-      {/* Main Content - White Background */}
-      <div className="max-w-6xl mx-auto px-8 py-6">
-        {/* Page Header */}
+      <div className="max-w-7xl mx-auto px-8 py-8">
         <button
           onClick={onBack}
-          className="flex items-center gap-2 text-gray-600 hover:text-[#000000] transition-colors mb-6 text-sm"
+          className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors mb-6 text-sm"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Back to Applicants</span>
         </button>
-        
-        <div className="mb-8">
-          <h1 className="text-4xl font-medium text-[#000000] mb-2">
-            {applicant.name}
+
+        <div className="mb-6">
+          <h1 className="text-3xl font-semibold text-gray-900 mb-1">
+            Applicant
           </h1>
-          <p className="text-gray-600 text-lg">Application ID: {applicant.id}</p>
-        </div>
-        
-        {/* AI Recommendation Banner */}
-        <div className={`p-6 rounded-lg mb-6 ${
-          aiRecommendation === 'accept' 
-            ? 'bg-green-50 border-2 border-green-500' 
-            : 'bg-blue-50 border-2 border-blue-500'
-        }`}>
-          <div className="flex items-center gap-3 mb-2">
-            {aiRecommendation === 'accept' ? (
-              <CheckCircle className="w-6 h-6 text-green-600" />
-            ) : (
-              <User className="w-6 h-6 text-blue-600" />
-            )}
-            <h3 className="text-xl font-medium text-gray-900">AI Recommendation</h3>
-          </div>
-          <p className="text-gray-700 text-lg">
-            {aiRecommendation === 'accept' 
-              ? 'This candidate is recommended for immediate acceptance based on high scores.'
-              : 'This candidate is recommended for a human interview to assess further.'}
+          <p className="text-gray-500 text-sm">
+            Application ID: APP-{String(applicant.id).padStart(3, '0')}
           </p>
         </div>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          {/* CV Preview with PDF Viewer */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h3 className="text-xl font-medium text-[#000000] mb-4">CV Preview</h3>
-            
-            {/* Embedded PDF Viewer */}
-            <div className="bg-gray-100 rounded-lg overflow-hidden mb-4" style={{ height: '400px' }}>
-              <iframe
-                src="/sample-cv.pdf"
-                className="w-full h-full"
-                title="CV PDF Viewer"
-              />
+
+        <div className={`rounded-xl p-6 mb-8 border shadow-sm ${
+          aiRecommendation === 'accept'
+            ? 'bg-green-50 border-green-200'
+            : 'bg-blue-50 border-blue-200'
+        }`}>
+          <div className="flex items-start gap-4">
+            <div className={`p-2 rounded-lg ${
+              aiRecommendation === 'accept' ? 'bg-green-100' : 'bg-blue-100'
+            }`}>
+              <Brain className={`w-6 h-6 ${
+                aiRecommendation === 'accept' ? 'text-green-600' : 'text-blue-600'
+              }`} />
             </div>
-            
-            {/* CV Score */}
-            <div className="pt-2">
-              <span className="font-medium text-[#000000] text-lg">CV Score: {applicant.cvScore}%</span>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-1">AI Recommendation</h3>
+              <p className="text-gray-700">
+                {aiRecommendation === 'accept'
+                  ? 'This candidate is recommended for immediate acceptance based on high scores.'
+                  : 'This candidate is recommended for a human interview to assess further.'}
+              </p>
             </div>
           </div>
-          
-          {/* Video Interview with Question Carousel */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h3 className="text-xl font-medium text-[#000000] mb-4">Video Interview</h3>
-            
-            {/* Question Text */}
-            <div className="bg-gray-50 rounded-lg p-4 mb-4">
-              <p className="text-sm text-gray-600 mb-2">Question {currentQuestionIndex + 1} of {interviewQuestions.length}</p>
-              <p className="text-gray-900">{interviewQuestions[currentQuestionIndex].question}</p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">CV Preview</h3>
+            <div className="bg-gray-100 rounded-lg overflow-hidden mb-4 border border-gray-200" style={{ height: '320px' }}>
+              {cvUrl ? (
+                <iframe
+                  src={cvUrl}
+                  className="w-full h-full"
+                  title="CV PDF Viewer"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-gray-500 text-sm">
+                  No CV uploaded for this application.
+                </div>
+              )}
             </div>
-            
-            {/* Video Player */}
-            <div className="bg-black rounded-lg aspect-video mb-4 flex items-center justify-center">
-              <div className="text-white text-sm">Video Response {currentQuestionIndex + 1}</div>
-            </div>
-            
-            {/* Navigation Controls */}
-            <div className="flex items-center justify-between mb-4">
-              <button
-                onClick={() => setCurrentQuestionIndex(Math.max(0, currentQuestionIndex - 1))}
-                disabled={currentQuestionIndex === 0}
-                className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            <div className="flex gap-3 mb-4">
+              <a
+                href={cvUrl ?? '#'}
+                download
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`flex-1 py-2.5 px-4 rounded-lg transition-all flex items-center justify-center gap-2 font-medium border-2 ${
+                  cvUrl ? 'border-gray-300 text-gray-700 hover:bg-gray-50' : 'border-gray-200 text-gray-400 cursor-not-allowed pointer-events-none'
+                }`}
               >
-                <ChevronLeft className="w-4 h-4" />
-                Previous
+                <Download className="w-4 h-4" />
+                Download CV
+              </a>
+            </div>
+            <div className="pt-2 border-t border-gray-200">
+              <span className="text-gray-600 text-sm">CV Score: </span>
+              <span className="font-semibold text-gray-900 text-lg">
+                {reviewLoading ? '…' : reviewData?.cv_score != null ? `${cvScore}%` : '—'}
+              </span>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">What the AI Found from the CV</h3>
+              <p className="text-xs text-gray-500 mb-4">
+                This analysis is based on CV compared to job requirements.
+              </p>
+              <ul className="space-y-3">
+                {reviewLoading ? (
+                  <li className="text-sm text-gray-500">Loading…</li>
+                ) : cvMatchingLines.length > 0 ? (
+                  cvMatchingLines.map((line, index) => (
+                    <li key={index} className="flex items-start gap-3">
+                      <span className="text-[#FF13F0] mt-1 text-lg">•</span>
+                      <span className="text-sm text-gray-700 leading-relaxed flex-1">{line.trim()}</span>
+                    </li>
+                  ))
+                ) : (
+                  <li className="text-sm text-gray-500">No CV matching analysis available.</li>
+                )}
+              </ul>
+            </div>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">AI Summary (CV-Based)</h3>
+              <p className="text-xs text-gray-500 mb-4">
+                Generated using CV and job description only.
+              </p>
+              <p className="text-sm text-gray-700 leading-relaxed">
+                {reviewLoading ? '…' : reviewData?.cv_reason_summary ?? 'No AI summary available.'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Video Interview</h3>
+          <p className="text-sm text-gray-500 mb-4">
+            Use the arrows to move between questions. Each slide: job question → video response → score & analysis.
+          </p>
+
+          <div className="space-y-4">
+            <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+              <p className="text-xs font-medium text-gray-500 mb-2">
+                Question {safeVideoIndex + 1} of {videoSlides.length}
+              </p>
+              <p className="text-sm text-gray-900">{currentSlide?.questionText ?? '—'}</p>
+            </div>
+
+            <div className="rounded-lg overflow-hidden border border-gray-200 bg-black aspect-video flex items-center justify-center">
+              {currentSlide?.submission?.video_url ? (
+                <video
+                  key={currentSlide.submission.video_url}
+                  src={currentSlide.submission.video_url}
+                  controls
+                  className="w-full h-full object-contain"
+                  preload="metadata"
+                  playsInline
+                />
+              ) : (
+                <div className="text-white/80 text-sm">No video recorded for this question.</div>
+              )}
+            </div>
+
+            <div className="pt-3 border-t border-gray-200">
+              <span className="text-gray-600 text-sm">Video Score (this question): </span>
+              <span className="font-semibold text-gray-900 text-lg">
+                {currentSlide?.submission?.video_score != null
+                  ? `${currentSlide.submission.video_score}%`
+                  : reviewData?.video_score != null
+                    ? `${reviewData.video_score}%`
+                    : '—'}
+              </span>
+            </div>
+
+            <div className="pt-4 border-t border-gray-200">
+              <h4 className="text-sm font-semibold text-gray-900 mb-3">AI Evaluation Metrics</h4>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-purple-50 rounded-lg p-3 border border-purple-100">
+                  <div className="text-xs text-purple-600 font-medium mb-1">Confidence</div>
+                  <div className="text-lg font-bold text-purple-900">
+                    {reviewLoading ? '…' : reviewData?.confidence_score != null ? `${reviewData.confidence_score}%` : '—'}
+                  </div>
+                </div>
+                <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
+                  <div className="text-xs text-blue-600 font-medium mb-1">Clarity</div>
+                  <div className="text-lg font-bold text-blue-900">
+                    {reviewLoading ? '…' : reviewData?.clarity != null ? `${reviewData.clarity}%` : '—'}
+                  </div>
+                </div>
+                <div className="bg-indigo-50 rounded-lg p-3 border border-indigo-100">
+                  <div className="text-xs text-indigo-600 font-medium mb-1">Answer Relevance</div>
+                  <div className="text-lg font-bold text-indigo-900">
+                    {reviewLoading ? '…' : reviewData?.answer_relevance != null ? `${reviewData.answer_relevance}%` : '—'}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-gray-200">
+              <h4 className="text-sm font-semibold text-gray-900 mb-2">Speech Analysis Insights</h4>
+              <p className="text-sm text-gray-600 leading-relaxed">
+                {reviewLoading ? '…' : reviewData?.speech_analysis ?? 'No speech analysis available.'}
+              </p>
+            </div>
+          </div>
+
+          {hasMultipleSlides && (
+            <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={() => setCurrentVideoIndex((i) => Math.max(0, i - 1))}
+                disabled={safeVideoIndex === 0}
+                className="p-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="Previous question"
+              >
+                <ChevronLeft className="w-5 h-5" />
               </button>
-              
               <div className="flex gap-2">
-                {interviewQuestions.map((_, index) => (
+                {videoSlides.map((_, index) => (
                   <button
                     key={index}
-                    onClick={() => setCurrentQuestionIndex(index)}
-                    className={`w-2 h-2 rounded-full transition-all ${
-                      index === currentQuestionIndex ? 'bg-[#FF13F0] w-6' : 'bg-gray-300'
+                    type="button"
+                    onClick={() => setCurrentVideoIndex(index)}
+                    className={`h-2 rounded-full transition-all ${
+                      index === safeVideoIndex ? 'bg-[#FF13F0] w-8' : 'bg-gray-300 w-2'
                     }`}
+                    aria-label={`Question ${index + 1}`}
                   />
                 ))}
               </div>
-              
               <button
-                onClick={() => setCurrentQuestionIndex(Math.min(interviewQuestions.length - 1, currentQuestionIndex + 1))}
-                disabled={currentQuestionIndex === interviewQuestions.length - 1}
-                className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                type="button"
+                onClick={() => setCurrentVideoIndex((i) => Math.min(videoSlides.length - 1, i + 1))}
+                disabled={safeVideoIndex >= videoSlides.length - 1}
+                className="p-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="Next question"
               >
-                Next
-                <ChevronRight className="w-4 h-4" />
+                <ChevronRight className="w-5 h-5" />
               </button>
             </div>
-            
-            {/* Video Score */}
-            <div className="pt-2">
-              <span className="font-medium text-[#000000] text-lg">Video Score: {applicant.videoScore}%</span>
-            </div>
-          </div>
+          )}
         </div>
-        
-        {/* AI Evaluation Metrics */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-          <h3 className="text-xl font-medium text-[#000000] mb-6">AI Evaluation Metrics</h3>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-5">Recruiter Actions</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="text-sm text-gray-600 mb-1">Confidence</div>
-              <div className="text-2xl font-semibold text-gray-900">85%</div>
-            </div>
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="text-sm text-gray-600 mb-1">Clarity</div>
-              <div className="text-2xl font-semibold text-gray-900">78%</div>
-            </div>
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="text-sm text-gray-600 mb-1">Answer Relevance</div>
-              <div className="text-2xl font-semibold text-gray-900">88%</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Matching Analysis */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-          <h3 className="text-xl font-medium text-[#000000] mb-2">What the AI Found from the CV</h3>
-          <p className="text-sm text-gray-500 mb-4">
-            This analysis is based only on the candidate's CV compared with the job requirements.
-          </p>
-          <ul className="space-y-3">
-            {cvAnalysis.map((item, index) => (
-              <li key={index} className="flex items-start gap-3">
-                <span className="text-gray-400 mt-1">•</span>
-                <span className="text-gray-700 leading-relaxed">{item}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* Model Summary */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-          <h3 className="text-xl font-medium text-[#000000] mb-2">AI Summary (CV-Based)</h3>
-          <p className="text-sm text-gray-500 mb-4">
-            Generated using CV and job description only.
-          </p>
-          <p className="text-gray-700 leading-relaxed">{cvModelSummary}</p>
-        </div>
-        
-        {/* Actions */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h3 className="text-xl font-medium text-[#000000] mb-6">Recruiter Actions</h3>
-          <div className="flex flex-col sm:flex-row gap-4">
             <button
               onClick={() => handleAction('accept')}
-              className="flex-1 bg-green-600 text-white py-3 px-6 rounded-lg hover:bg-green-700 transition-all flex items-center justify-center gap-2"
+              className="bg-green-600 text-white py-3.5 px-6 rounded-lg hover:bg-green-700 transition-all flex items-center justify-center gap-2 font-medium shadow-sm"
             >
               <CheckCircle className="w-5 h-5" />
               Accept Candidate
             </button>
             <button
               onClick={() => handleAction('interview')}
-              className="flex-1 bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
+              className="bg-blue-600 text-white py-3.5 px-6 rounded-lg hover:bg-blue-700 transition-all flex items-center justify-center gap-2 font-medium shadow-sm"
             >
               <User className="w-5 h-5" />
               Send to Human Interview
             </button>
             <button
               onClick={() => handleAction('reject')}
-              className="flex-1 bg-red-600 text-white py-3 px-6 rounded-lg hover:bg-red-700 transition-all flex items-center justify-center gap-2"
+              className="bg-red-600 text-white py-3.5 px-6 rounded-lg hover:bg-red-700 transition-all flex items-center justify-center gap-2 font-medium shadow-sm"
             >
               <XCircle className="w-5 h-5" />
               Reject Candidate
@@ -303,17 +467,16 @@ export function CandidateReview({
           </div>
         </div>
       </div>
-      
-      {/* Confirmation Modal */}
+
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-6">
-          <div className="bg-white rounded-lg p-8 max-w-md w-full">
+          <div className="bg-white rounded-xl p-8 max-w-md w-full shadow-2xl">
             {showWarning && (
-              <div className="bg-yellow-50 border-2 border-yellow-500 rounded-lg p-4 mb-6">
+              <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4 mb-6">
                 <div className="flex items-start gap-3">
                   <AlertTriangle className="w-6 h-6 text-yellow-600 flex-shrink-0 mt-1" />
                   <div>
-                    <h4 className="font-medium text-yellow-900 mb-1">Warning</h4>
+                    <h4 className="font-semibold text-yellow-900 mb-1">Warning</h4>
                     <p className="text-sm text-yellow-800">
                       Your decision differs from the AI recommendation. Are you sure you want to proceed?
                     </p>
@@ -321,8 +484,7 @@ export function CandidateReview({
                 </div>
               </div>
             )}
-            
-            <h3 className="text-2xl font-medium text-[#1e3a5f] mb-4">
+            <h3 className="text-2xl font-semibold text-gray-900 mb-4">
               Confirm Action
             </h3>
             <p className="text-gray-700 mb-6">
@@ -332,21 +494,27 @@ export function CandidateReview({
                 {modalType === 'interview' && 'send to human interview'}
                 {modalType === 'reject' && 'reject'}
               </strong>{' '}
-              {applicant.name}?
+              {applicant.name}? This will be saved to the application.
             </p>
+            {decisionError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+                {decisionError}
+              </div>
+            )}
             <div className="flex gap-4">
               <button
                 onClick={() => {
                   setShowModal(false);
                   setShowWarning(false);
+                  setDecisionError(null);
                 }}
-                className="flex-1 border-2 border-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-50 transition-all"
+                className="flex-1 border-2 border-gray-300 text-gray-700 py-2.5 px-4 rounded-lg hover:bg-gray-50 transition-all font-medium"
               >
                 Cancel
               </button>
               <button
-                onClick={confirmAction}
-                className="flex-1 bg-[#1e3a5f] text-white py-2 px-4 rounded-lg hover:bg-[#2d5080] transition-all"
+                onClick={() => confirmAction()}
+                className="flex-1 bg-[#FF13F0] text-white py-2.5 px-4 rounded-lg hover:bg-[#FF13F0]/90 transition-all font-medium"
               >
                 Confirm
               </button>

@@ -60,3 +60,18 @@ async def upsert_video_metadata(
 
     return dict(row)
 
+
+async def list_by_application(pool: asyncpg.Pool, application_id: int) -> list[dict]:
+    """List all video submissions for an application, ordered by question_index (for Candidate Review)."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT question_index, question_text, video_url, video_score
+            FROM video_submissions
+            WHERE application_id = $1
+            ORDER BY question_index;
+            """,
+            application_id,
+        )
+    return [dict(r) for r in rows]
+

@@ -1,6 +1,10 @@
-import { useState } from 'react';
-import { Search, Filter, Briefcase, MapPin, Calendar, User } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Search, Briefcase, MapPin } from 'lucide-react';
 import neurohireLogo from '@/assets/neurohire-logo.png';
+
+const API_BASE =
+  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
+  'http://127.0.0.1:8000';
 
 interface CompanyJobsProps {
   companyName: string;
@@ -12,99 +16,53 @@ interface Job {
   location: string;
   salary: string;
   recruiterName: string;
-  applicantCount: number;
   status: 'open' | 'closed';
   postedDate: string;
 }
 
-const mockJobs: Job[] = [
-  {
-    id: '1',
-    title: 'Store Worker – Branch 1',
-    location: 'Gulberg, Lahore',
-    salary: 'PKR 20,000',
-    recruiterName: 'Ahmed Khan',
-    applicantCount: 24,
-    status: 'open',
-    postedDate: 'Jan 28, 2026',
-  },
-  {
-    id: '2',
-    title: 'Cashier – DHA Branch',
-    location: 'DHA, Karachi',
-    salary: 'PKR 22,000',
-    recruiterName: 'Sara Ali',
-    applicantCount: 18,
-    status: 'open',
-    postedDate: 'Jan 30, 2026',
-  },
-  {
-    id: '3',
-    title: 'Delivery Rider – F-7',
-    location: 'F-7, Islamabad',
-    salary: 'PKR 25,000',
-    recruiterName: 'Usman Malik',
-    applicantCount: 32,
-    status: 'closed',
-    postedDate: 'Jan 25, 2026',
-  },
-  {
-    id: '4',
-    title: 'Store Worker – Saddar',
-    location: 'Saddar, Rawalpindi',
-    salary: 'PKR 19,500',
-    recruiterName: 'Ahmed Khan',
-    applicantCount: 15,
-    status: 'open',
-    postedDate: 'Feb 1, 2026',
-  },
-  {
-    id: '5',
-    title: 'Customer Service Representative',
-    location: 'Johar Town, Lahore',
-    salary: 'PKR 23,000',
-    recruiterName: 'Sara Ali',
-    applicantCount: 21,
-    status: 'open',
-    postedDate: 'Feb 2, 2026',
-  },
-  {
-    id: '6',
-    title: 'Warehouse Assistant',
-    location: 'North Nazimabad, Karachi',
-    salary: 'PKR 21,000',
-    recruiterName: 'Hassan Raza',
-    applicantCount: 12,
-    status: 'open',
-    postedDate: 'Feb 3, 2026',
-  },
-  {
-    id: '7',
-    title: 'Sales Associate – Mall Branch',
-    location: 'Centaurus Mall, Islamabad',
-    salary: 'PKR 24,000',
-    recruiterName: 'Usman Malik',
-    applicantCount: 28,
-    status: 'open',
-    postedDate: 'Jan 29, 2026',
-  },
-  {
-    id: '8',
-    title: 'Kitchen Helper',
-    location: 'Clifton, Karachi',
-    salary: 'PKR 18,000',
-    recruiterName: 'Hassan Raza',
-    applicantCount: 9,
-    status: 'closed',
-    postedDate: 'Jan 27, 2026',
-  },
-];
+function formatPostedDate(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch {
+    return iso;
+  }
+}
 
 export function CompanyJobs({ companyName }: CompanyJobsProps) {
-  const [jobs] = useState<Job[]>(mockJobs);
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'closed'>('all');
   const [recruiterFilter, setRecruiterFilter] = useState<string>('all');
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    const params = new URLSearchParams({ company_name: companyName });
+    fetch(`${API_BASE}/company/jobs?${params}`)
+      .then((res) => (res.ok ? res.json() : { jobs: [] }))
+      .then((data: { jobs: Array<{ id: string; title: string; location: string; salary_monthly_pkr: number; recruiter_name: string; status: string; created_at: string }> }) => {
+        if (cancelled) return;
+        const mapped: Job[] = (data.jobs || []).map((j) => ({
+          id: j.id,
+          title: j.title,
+          location: j.location || '—',
+          salary: j.salary_monthly_pkr ? `PKR ${Number(j.salary_monthly_pkr).toLocaleString()}` : '—',
+          recruiterName: j.recruiter_name || 'Recruiter',
+          status: j.status === 'open' ? 'open' : 'closed',
+          postedDate: formatPostedDate(j.created_at),
+        }));
+        setJobs(mapped);
+      })
+      .catch(() => {
+        if (!cancelled) setJobs([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [companyName]);
 
   // Get unique recruiter names
   const uniqueRecruiters = Array.from(new Set(jobs.map(job => job.recruiterName)));
@@ -185,17 +143,21 @@ export function CompanyJobs({ companyName }: CompanyJobsProps) {
           </select>
         </div>
 
-        {/* Summary Stats */}
+        {/* Summary Stats - jobs only, no applicant counts */}
         <div className="flex gap-6 mt-4 text-sm text-gray-600">
           <span>Total Jobs: <strong className="text-gray-900">{jobs.length}</strong></span>
           <span>Open: <strong className="text-green-700">{jobs.filter(j => j.status === 'open').length}</strong></span>
           <span>Closed: <strong className="text-gray-700">{jobs.filter(j => j.status === 'closed').length}</strong></span>
-          <span>Total Applicants: <strong className="text-blue-700">{jobs.reduce((sum, j) => sum + j.applicantCount, 0)}</strong></span>
         </div>
       </div>
 
       {/* Job Cards */}
       <div className="flex-1 px-8 py-6 overflow-y-auto">
+        {loading && (
+          <div className="text-center py-12 text-gray-500">Loading jobs…</div>
+        )}
+        {!loading && (
+        <>
         <div className="space-y-4 max-w-6xl">
           {filteredJobs.map((job, index) => (
             <div
@@ -227,7 +189,7 @@ export function CompanyJobs({ companyName }: CompanyJobsProps) {
                 {job.title}
               </h3>
 
-              {/* Job Details */}
+              {/* Job Details - no applicant count */}
               <div className="flex flex-wrap items-center gap-4 mb-4 text-gray-700">
                 <div className="flex items-center gap-2">
                   <MapPin className="w-4 h-4 text-gray-500" />
@@ -236,10 +198,6 @@ export function CompanyJobs({ companyName }: CompanyJobsProps) {
                 <div className="flex items-center gap-2">
                   <Briefcase className="w-4 h-4 text-gray-500" />
                   <span>{job.salary}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <User className="w-4 h-4 text-gray-500" />
-                  <span className="font-medium">{job.applicantCount} applicants</span>
                 </div>
               </div>
 
@@ -266,6 +224,8 @@ export function CompanyJobs({ companyName }: CompanyJobsProps) {
               To edit or manage applicants, please contact the recruiter who posted the job.
             </p>
           </div>
+        )}
+        </>
         )}
       </div>
     </div>

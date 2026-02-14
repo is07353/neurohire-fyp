@@ -12,5 +12,10 @@ if not DATABASE_URL:
 
 
 async def create_pool() -> asyncpg.Pool:
-    """Create and return the Neon Postgres connection pool."""
-    return await asyncpg.create_pool(DATABASE_URL)
+    """Create and return the Neon Postgres connection pool with tuning for faster response."""
+    return await asyncpg.create_pool(
+        DATABASE_URL,
+        min_size=1,  # Keep one connection warm so first request isn't slow
+        max_size=10,
+        command_timeout=15,  # Fail fast instead of hanging on slow DB
+    )

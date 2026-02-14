@@ -3,7 +3,7 @@ import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr
 
-from repositories import company_repo
+from repositories import company_repo, job_repo
 
 router = APIRouter(prefix="/company", tags=["company"])
 
@@ -87,4 +87,14 @@ async def company_login(
     companyName=result["company_name"],
     contactEmail=result["contact_email"],
   )
+
+
+@router.get("/jobs")
+async def list_company_jobs(
+  company_name: str,
+  pool: asyncpg.Pool = Depends(get_db_pool),
+):
+  """List jobs posted by recruiters belonging to this company. Jobs only (no applicant counts)."""
+  rows = await job_repo.list_jobs_for_company(pool, company_name=company_name)
+  return {"jobs": rows}
 
