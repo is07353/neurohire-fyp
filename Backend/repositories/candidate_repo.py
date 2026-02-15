@@ -60,3 +60,56 @@ async def create_candidate_minimal(pool: asyncpg.Pool) -> dict:
         )
     return dict(row)
 
+
+async def get_candidate_by_id(pool: asyncpg.Pool, candidate_id: int) -> dict | None:
+    """Get a single candidate by id (for overview / review screen)."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT candidate_id, full_name, email, phone, address
+            FROM candidates
+            WHERE candidate_id = $1;
+            """,
+            candidate_id,
+        )
+    return dict(row) if row else None
+
+
+async def update_candidate_from_extraction(
+    pool: asyncpg.Pool,
+    candidate_id: int,
+    *,
+    full_name: str | None = None,
+    email: str | None = None,
+    phone: str | None = None,
+    address: str | None = None,
+) -> None:
+    """Update candidate with extracted fields from CV analysis (only non-empty values)."""
+    updates = []
+    args = []
+    n = 1
+    if full_name is not None and str(full_name).strip():
+        updates.append(f"full_name = ${n}")
+        args.append(str(full_name).strip())
+        n += 1
+    if email is not None and str(email).strip():
+        updates.append(f"email = ${n}")
+        args.append(str(email).strip())
+        n += 1
+    if phone is not None and str(phone).strip():
+        updates.append(f"phone = ${n}")
+        args.append(str(phone).strip())
+        n += 1
+    if address is not None and str(address).strip():
+        updates.append(f"address = ${n}")
+        args.append(str(address).strip())
+        n += 1
+    if not updates:
+        return
+    args.append(candidate_id)
+    async with pool.acquire() as conn:
+        await conn.execute(
+            f"UPDATE candidates SET {', '.join(updates)} WHERE candidate_id = ${n};",
+            *args,
+        )
+

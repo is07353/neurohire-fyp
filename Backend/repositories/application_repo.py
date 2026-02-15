@@ -1,4 +1,5 @@
 """DB queries for candidate_applications."""
+import json
 import asyncpg
 
 
@@ -21,6 +22,23 @@ async def create_candidate_application(
         )
 
     return dict(row)
+
+
+async def get_application_by_id(
+    pool: asyncpg.Pool,
+    application_id: int,
+) -> dict | None:
+    """Get application by id (for candidate overview / linking to candidate)."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT application_id, candidate_id, job_id, status, tag_needs_review, created_at
+            FROM candidate_applications
+            WHERE application_id = $1;
+            """,
+            application_id,
+        )
+    return dict(row) if row else None
 
 
 async def list_applications_for_job(
@@ -92,6 +110,66 @@ async def get_ai_assessment_for_application(
             application_id,
         )
     return dict(row) if row else None
+
+
+async def insert_empty_ai_assessment(
+    pool: asyncpg.Pool,
+    application_id: int,
+) -> None:
+    """Insert one ai_assessments row for an application (all fields NULL). Filled later by CV+JD and video analysis."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO ai_assessments (application_id)
+            VALUES ($1)
+            ON CONFLICT (application_id) DO NOTHING;
+            """,
+            application_id,
+        )
+
+
+async def upsert_cv_jd_assessment(
+    pool: asyncpg.Pool,
+    application_id: int,
+    *,
+    cv_score: int | None = None,
+    cv_recommendation: str | None = None,
+    cv_matching_analysis: str | None = None,
+    cv_reason_summary: str | None = None,
+    cv_jd_output: dict | None = None,
+) -> None:
+    """
+    Update ai_assessments with CV+JD model output. Inserts a row if none exists.
+    """
+    # Serialize dict to JSON string for jsonb column (avoids driver/serialization issues)
+    cv_jd_output_json = json.dumps(cv_jd_output) if cv_jd_output is not None else None
+    async with pool.acquire() as conn:
+        existing = await conn.fetchval(
+            "SELECT assessment_id FROM ai_assessments WHERE application_id = $1;",
+            application_id,
+        )
+        if not existing:
+            await conn.execute(
+                "INSERT INTO ai_assessments (application_id) VALUES ($1);",
+                application_id,
+            )
+        await conn.execute(
+            """
+            UPDATE ai_assessments SET
+                cv_score = $2,
+                cv_recommendation = $3,
+                cv_matching_analysis = $4,
+                cv_reason_summary = $5,
+                cv_jd_output = $6::jsonb
+            WHERE application_id = $1;
+            """,
+            application_id,
+            cv_score,
+            cv_recommendation,
+            cv_matching_analysis,
+            cv_reason_summary,
+            cv_jd_output_json,
+        )
 
 
 async def upsert_dummy_ai_assessment(
@@ -176,6 +254,20 @@ async def upsert_dummy_ai_assessment(
                 dummy_speech_analysis,
             )
     return True
+
+
+async def ensure_ai_assessments_for_all_applications(pool: asyncpg.Pool) -> int:
+    """Insert empty ai_assessments row for any application that does not have one. Returns number inserted."""
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            """
+            INSERT INTO ai_assessments (application_id)
+            SELECT application_id FROM candidate_applications ca
+            WHERE NOT EXISTS (SELECT 1 FROM ai_assessments aa WHERE aa.application_id = ca.application_id);
+            """
+        )
+    # result is like "INSERT 0 5"; return the number
+    return int(result.split()[-1]) if result and result.split()[-1].isdigit() else 0
 
 
 async def seed_dummy_ai_assessments_for_all_applications(pool: asyncpg.Pool) -> dict:

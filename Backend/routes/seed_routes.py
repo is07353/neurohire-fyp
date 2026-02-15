@@ -36,6 +36,13 @@ async def set_one_job_weightage_75_25(pool: asyncpg.Pool = Depends(get_db_pool))
     }
 
 
+@router.post("/ai-assessments-ensure")
+async def ensure_ai_assessments(pool: asyncpg.Pool = Depends(get_db_pool)):
+    """Insert empty ai_assessments row for every application that has none. Run once to backfill the table."""
+    inserted = await application_repo.ensure_ai_assessments_for_all_applications(pool)
+    return {"message": "ai_assessments rows ensured", "inserted": inserted}
+
+
 @router.post("/ai-assessments-dummy")
 async def seed_ai_assessments_dummy(pool: asyncpg.Pool = Depends(get_db_pool)):
     """Insert dummy ai_assessments for every candidate_application that has none. Use so Candidate Review shows real DB data."""
