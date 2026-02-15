@@ -13,6 +13,10 @@ interface ReviewInformationProps {
   onContinue: () => void;
 }
 
+const API_BASE =
+  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
+  'http://127.0.0.1:8000';
+
 const translations = {
   english: {
     title: 'Review Your Information',
@@ -55,28 +59,46 @@ export function ReviewInformation({
 
   const [loading, setLoading] = useState(true);
 
-  // ✅ FETCH DATA FROM BACKEND
+  // Fetch extracted CV data from backend; poll a few times if still empty (analysis may be running)
   useEffect(() => {
-    fetch("http://127.0.0.1:8000/candidate/overview")
-      .then(res => res.json())
-      .then(data => {
-        console.log("CV data from backend:", data);
+    let cancelled = false;
+    let pollCount = 0;
+    const maxPolls = 10;
 
-        const parsedInfo: CandidateInfo = {
-          fullName: data.name ?? '',
-          phone: data.phone ?? '',
-          email: data.email ?? '',
-          address: data.address ?? '',
-        };
+    function fetchOverview() {
+      fetch(`${API_BASE}/candidate/overview`)
+        .then(res => res.json())
+        .then(data => {
+          if (cancelled) return;
+          console.log("CV data from backend:", data);
 
-        setInfo(parsedInfo);
-        onInfoUpdate(parsedInfo); // sync parent
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error("Failed to fetch CV info:", err);
-        setLoading(false);
-      });
+          const parsedInfo: CandidateInfo = {
+            fullName: data.name ?? '',
+            phone: data.phone ?? '',
+            email: data.email ?? '',
+            address: data.address ?? '',
+          };
+
+          setInfo(parsedInfo);
+          onInfoUpdate(parsedInfo);
+          setLoading(false);
+
+          // If still no name and analysis might be in progress, poll every 3s for a while
+          if (!parsedInfo.fullName && pollCount < maxPolls) {
+            pollCount += 1;
+            setTimeout(fetchOverview, 3000);
+          }
+        })
+        .catch(err => {
+          if (!cancelled) {
+            console.error("Failed to fetch CV info:", err);
+            setLoading(false);
+          }
+        });
+    }
+
+    fetchOverview();
+    return () => { cancelled = true; };
   }, []);
 
 
@@ -87,6 +109,7 @@ export function ReviewInformation({
   };
 
   const isFormComplete = info.fullName && info.phone && info.email && info.address;
+  const noDetailsExtracted = !loading && !info.fullName && !info.phone && !info.email && !info.address;
 
   return (
     <div className="py-8">
@@ -97,6 +120,11 @@ export function ReviewInformation({
         <p className="text-xl text-gray-600 mt-4 max-w-3xl mx-auto">
           {t.subtitle}
         </p>
+        {noDetailsExtracted && (
+          <p className="text-base text-amber-700 mt-3 max-w-2xl mx-auto bg-amber-50 border border-amber-200 rounded-lg px-4 py-2">
+            {language === 'urdu' ? 'ہم آپ کے CV سے معلومات نہیں نکال سکے۔ براہ کرم نیچے والے خانے خود بھریں۔' : "We couldn't extract details from your CV. Please fill in the fields below."}
+          </p>
+        )}
       </div>
       
       <div className="space-y-6 mb-12">

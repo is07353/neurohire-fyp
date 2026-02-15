@@ -1,5 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Language } from '../App';
+
+const API_BASE =
+  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
+  'http://127.0.0.1:8000';
 
 interface CVProcessingScreenProps {
   language: Language;
@@ -21,26 +25,57 @@ const statusMessages = {
   ],
 };
 
+const POLL_INTERVAL_MS = 2000;
+const MAX_WAIT_MS = 120000; // 2 minutes fallback
+
 export function CVProcessingScreen({ language, onComplete }: CVProcessingScreenProps) {
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
   const messages = statusMessages[language || 'english'];
+  const completedRef = useRef(false);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
 
   useEffect(() => {
-    // Cycle through messages every 2.5 seconds
     const messageInterval = setInterval(() => {
       setCurrentMessageIndex((prev) => (prev + 1) % messages.length);
     }, 2500);
 
-    // Complete processing after 8 seconds
-    const processingTimeout = setTimeout(() => {
-      onComplete();
-    }, 8000);
+    const startTime = Date.now();
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    function poll() {
+      if (completedRef.current) return;
+      if (Date.now() - startTime > MAX_WAIT_MS) {
+        completedRef.current = true;
+        onCompleteRef.current();
+        return;
+      }
+      fetch(`${API_BASE}/candidate/analysis-status`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (completedRef.current) return;
+          if (data.pending === false || data.pending === 'false') {
+            completedRef.current = true;
+            onCompleteRef.current();
+            return;
+          }
+          timeoutId = setTimeout(poll, POLL_INTERVAL_MS);
+        })
+        .catch(() => {
+          if (completedRef.current) return;
+          timeoutId = setTimeout(poll, POLL_INTERVAL_MS);
+        });
+    }
+
+    poll();
 
     return () => {
+      completedRef.current = true;
       clearInterval(messageInterval);
-      clearTimeout(processingTimeout);
+      if (timeoutId !== null) clearTimeout(timeoutId);
     };
-  }, [messages.length, onComplete]);
+    // Run once on mount; use refs for onComplete so parent re-renders don't tear down the effect
+  }, [messages.length]);
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden">

@@ -1,4 +1,6 @@
 """API endpoints for candidate flow and health."""
+import asyncio
+import json
 import asyncpg
 from fastapi import APIRouter, Request, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel
@@ -6,6 +8,7 @@ from pydantic import BaseModel
 from repositories import candidate_repo, job_repo, cv_repo, application_repo, video_repo
 from cv_storage import download_and_save_cv
 from video_storage import download_and_save_video
+from services.cv_analysis_client import run_cv_jd_analysis
 
 router = APIRouter()
 
@@ -92,15 +95,133 @@ async def get_job_questions(job_id: str, pool: asyncpg.Pool = Depends(get_db_poo
     return {"questions": job.get("questions") or []}
 
 
+def _clean_extracted_value(v: str | None) -> str | None:
+    """Treat 'Not provided' and similar as empty so we don't persist them."""
+    if v is None:
+        return None
+    s = str(v).strip()
+    if not s or s.lower() in ("not provided", "n/a", "na", "none"):
+        return None
+    return s
+
+
+async def _download_and_analyze_cv(
+    app,
+    cv_url: str,
+    application_id: int,
+    candidate_id: int,
+    job_description: str,
+) -> None:
+    """
+    Background task: download CV, call Gradio CV+JD API, update candidate and cv_data.
+    We always mark cv_data as processed at the end so the loading screen can exit.
+    """
+    pool = app.state.db_pool
+    cv_text = ""
+    parsed_keywords = ""
+    technical_score = None
+    assessment_payload = None
+    try:
+        try:
+            path = download_and_save_cv(cv_url, application_id)
+        except Exception as e:
+            print(f"[cv_analysis] Failed to download CV for application_id={application_id}: {e}")
+            return
+        analysis = run_cv_jd_analysis(path, job_description or "")
+        print(f"[cv_analysis] Model normalized analysis for application_id={application_id}: {analysis}")
+        if analysis.get("error"):
+            print(f"[cv_analysis] API error for application_id={application_id}: {analysis['error']}")
+        name = _clean_extracted_value(analysis.get("name"))
+        email = _clean_extracted_value(analysis.get("email"))
+        phone = _clean_extracted_value(analysis.get("phone_number"))
+        address = _clean_extracted_value(analysis.get("address"))
+        cv_text = (analysis.get("description") or "").strip()
+        matching = analysis.get("matching_analysis") or []
+        parsed_keywords = json.dumps(matching) if isinstance(matching, list) else str(matching)
+        technical_score = analysis.get("Total_score")
+        # Build payload for ai_assessments so we can persist even if a later step fails
+        cv_matching_str = "\n".join(str(x) for x in matching) if matching else None
+        assessment_payload = {
+            "cv_score": technical_score,
+            "cv_recommendation": (analysis.get("recommendation") or "").strip() or None,
+            "cv_matching_analysis": cv_matching_str,
+            "cv_reason_summary": cv_text.strip() or None,
+            "cv_jd_output": analysis,
+        }
+        await candidate_repo.update_candidate_from_extraction(
+            pool,
+            candidate_id,
+            full_name=name or None,
+            email=email or None,
+            phone=phone or None,
+            address=address or None,
+        )
+    except Exception as e:
+        print(f"[cv_analysis] Error for application_id={application_id}: {e}")
+    finally:
+        # Always mark as processed so the loading screen exits
+        if not cv_text and technical_score is None:
+            cv_text = " "
+        await cv_repo.update_cv_analysis(
+            pool,
+            application_id,
+            cv_text=cv_text,
+            parsed_keywords=parsed_keywords,
+            technical_score=technical_score,
+        )
+        # Persist to ai_assessments even if something above failed (so CV fields are never left NULL)
+        if assessment_payload is not None:
+            try:
+                await application_repo.upsert_cv_jd_assessment(
+                    pool,
+                    application_id,
+                    **assessment_payload,
+                )
+                print(f"[cv_analysis] ai_assessments updated for application_id={application_id}")
+            except Exception as e2:
+                print(f"[cv_analysis] Failed to update ai_assessments for application_id={application_id}: {e2}")
+        print(f"[cv_analysis] Updated candidate_id={candidate_id}, application_id={application_id} (score={technical_score})")
+
+
 @router.get("/candidate/overview")
-def candidate_overview():
-    """Placeholder candidate overview (e.g. from CV)."""
+async def candidate_overview(pool: asyncpg.Pool = Depends(get_db_pool)):
+    """Return extracted candidate info (name, phone, email, address) for the latest application in this flow."""
+    app_id = _latest_application_id
+    if not app_id:
+        return {"name": "", "phone": "", "email": "", "address": ""}
+    app_row = await application_repo.get_application_by_id(pool, app_id)
+    if not app_row:
+        return {"name": "", "phone": "", "email": "", "address": ""}
+    candidate = await candidate_repo.get_candidate_by_id(pool, app_row["candidate_id"])
+    if not candidate:
+        return {"name": "", "phone": "", "email": "", "address": ""}
     return {
-        "name": "Ali Khan",
-        "phone": "03001234567",
-        "email": "ali@example.com",
-        "address": "Karachi, Pakistan",
+        "name": (candidate.get("full_name") or "").strip(),
+        "phone": (candidate.get("phone") or "").strip(),
+        "email": (candidate.get("email") or "").strip(),
+        "address": (candidate.get("address") or "").strip(),
     }
+
+
+@router.get("/candidate/analysis-status")
+async def candidate_analysis_status(pool: asyncpg.Pool = Depends(get_db_pool)):
+    """
+    Return whether CV+JD analysis is still pending for the latest application.
+    Used by the processing screen to wait until the API has responded.
+    On DB timeout or error we return pending=False so the loading screen can exit.
+    """
+    app_id = _latest_application_id
+    if not app_id:
+        return {"pending": False}
+    try:
+        pending = not await asyncio.wait_for(
+            cv_repo.is_analysis_complete_for_application(pool, app_id),
+            timeout=10.0,
+        )
+    except (asyncio.TimeoutError, Exception) as e:
+        print(f"[cv_analysis] analysis-status error for app_id={app_id}: {e}")
+        pending = False
+    return {"pending": pending}
 
 
 @router.post("/candidate/selected-job")
@@ -125,6 +246,7 @@ def get_candidate_selected_job(session_id: str = ""):
 
 @router.post("/candidate/cv-url")
 async def receive_cv_url(
+    request: Request,
     payload: CVUrlPayload,
     pool: asyncpg.Pool = Depends(get_db_pool),
     background_tasks: BackgroundTasks = None,
@@ -133,8 +255,7 @@ async def receive_cv_url(
     Receive the uploaded CV URL from the frontend and:
     - create a minimal candidate row, and
     - store basic CV metadata in the cv_data table.
-
-    This ensures there is at least one candidate record as soon as a CV is uploaded.
+    - in background: download CV, call CV+JD analysis API, update candidate and cv_data.
     """
     print("[Candidate CV URL]", payload.file_url)
 
@@ -148,6 +269,8 @@ async def receive_cv_url(
     except (TypeError, ValueError):
         raise HTTPException(status_code=400, detail="Invalid job_id for candidate CV upload")
 
+    job_description = (selected.get("job_description") or "").strip()
+
     # 1) Create a minimal candidate row (fields will be filled later from parsing / review form)
     candidate = await candidate_repo.create_candidate_minimal(pool)
 
@@ -158,7 +281,10 @@ async def receive_cv_url(
         job_id=job_id,
     )
 
-    # Remember the latest application_id for subsequent video upload
+    # Create ai_assessments row so it exists and can be filled by CV+JD and video analysis
+    await application_repo.insert_empty_ai_assessment(pool, application["application_id"])
+
+    # Remember the latest application_id for subsequent video upload and overview
     global _latest_application_id
     _latest_application_id = application["application_id"]
 
@@ -170,13 +296,15 @@ async def receive_cv_url(
         file_size=payload.file_size,
         mime_type=payload.mime_type,
     )
-    # 4) Kick off a background task to download and persist the actual CV file
-    #    into Backend/cv_pdfs for OCR.
+    # 4) Background: download CV, run Gradio CV+JD analysis, update candidate + cv_data
     if background_tasks is not None:
         background_tasks.add_task(
-            download_and_save_cv,
+            _download_and_analyze_cv,
+            request.app,
             payload.file_url,
             application["application_id"],
+            candidate["candidate_id"],
+            job_description,
         )
 
     return {
