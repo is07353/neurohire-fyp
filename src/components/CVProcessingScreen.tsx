@@ -14,13 +14,11 @@ const statusMessages = {
   english: [
     'Analyzing your CV',
     'Extracting information from your CV',
-    'Matching your profile with job requirements',
     'Hold tight, this won\'t take long',
   ],
   urdu: [
     'آپ کی سی وی کا تجزیہ کیا جا رہا ہے',
     'آپ کی سی وی سے معلومات نکالی جا رہی ہیں',
-    'آپ کی پروفائل کو ملازمت کی ضروریات سے ملایا جا رہا ہے',
     'ذرا صبر کریں، یہ زیادہ وقت نہیں لے گا',
   ],
 };

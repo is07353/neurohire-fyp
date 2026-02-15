@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ArrowLeft, ChevronDown, X, Plus, Trash2 } from 'lucide-react';
-import neurohireLogo from '@/assets/neurohire-logo.png';
+import neurohireLogo from '@/assets/neurohire-logo-2.png';
 import type { Job } from '../../App';
 
 interface EditJobProps {
@@ -185,7 +185,7 @@ export function EditJob({ job, recruiterName, onBack, onLogout }: EditJobProps) 
       <nav className="bg-white px-8 py-6">
         <div className="flex items-center justify-between">
           {/* Left: Logo */}
-          <img src={neurohireLogo} alt="neurohire" className="h-8" />
+          <img src={neurohireLogo} alt="neurohire" className="h-10" />
 
           {/* Right: Avatar Only */}
           <div className="flex items-center gap-4">

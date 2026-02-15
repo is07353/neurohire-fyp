@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Search, UserPlus, CheckCircle, XCircle, Clock, Mail, Phone, Building2 } from 'lucide-react';
-import neurohireLogo from '@/assets/neurohire-logo.png';
+import neurohireLogo from '@/assets/neurohire-logo-2.png';
 
 interface CompanyRecruitersProps {
   companyName: string;
@@ -130,7 +130,7 @@ export function CompanyRecruiters({ companyName }: CompanyRecruitersProps) {
       <header className="bg-white border-b border-gray-200 px-8 py-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl text-gray-800">Recruiters Management</h1>
-          <img src={neurohireLogo} alt="NeuroHire" className="h-8" />
+          <img src={neurohireLogo} alt="NeuroHire" className="h-10" />
         </div>
       </header>
 

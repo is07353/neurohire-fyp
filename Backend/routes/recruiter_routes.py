@@ -93,6 +93,25 @@ async def recruiter_login(
   )
 
 
+class RecruiterAnalyticsResponse(BaseModel):
+  total_applicants: int
+  recommended_by_ai: int
+  needs_review: int
+  shortlisted: int
+  ai_recommendation_distribution: list[dict]
+  monthly_applications: list[dict]
+
+
+@router.get("/analytics", response_model=RecruiterAnalyticsResponse)
+async def get_recruiter_analytics(
+  recruiter_id: int = Query(..., description="Recruiter ID"),
+  pool: asyncpg.Pool = Depends(get_db_pool),
+):
+  """Get analytics for the recruiter overview dashboard."""
+  data = await application_repo.get_recruiter_analytics(pool, recruiter_id=recruiter_id)
+  return RecruiterAnalyticsResponse(**data)
+
+
 class RecruiterJob(BaseModel):
   id: str
   title: str
@@ -246,6 +265,9 @@ class JobApplicantResponse(BaseModel):
   job_id: int
   status: str
   candidate_name: str
+  candidate_email: str | None
+  candidate_phone: str | None
+  candidate_address: str | None
   cv_score: int | None
   video_score: int | None
   total_score: int | None
@@ -269,6 +291,9 @@ async def list_job_applicants(
       job_id=r["job_id"],
       status=r["status"],
       candidate_name=r["candidate_name"],
+      candidate_email=r.get("candidate_email"),
+      candidate_phone=r.get("candidate_phone"),
+      candidate_address=r.get("candidate_address"),
       cv_score=r["cv_score"],
       video_score=r["video_score"],
       total_score=r["total_score"],

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Search, Briefcase, MapPin } from 'lucide-react';
-import neurohireLogo from '@/assets/neurohire-logo.png';
+import neurohireLogo from '@/assets/neurohire-logo-2.png';
 
 const API_BASE =
   (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
@@ -100,7 +100,7 @@ export function CompanyJobs({ companyName }: CompanyJobsProps) {
             <h1 className="text-2xl text-gray-800">All Jobs</h1>
             <p className="text-sm text-gray-600 mt-1">View all jobs posted by your recruiters</p>
           </div>
-          <img src={neurohireLogo} alt="NeuroHire" className="h-8" />
+          <img src={neurohireLogo} alt="NeuroHire" className="h-10" />
         </div>
       </header>
 
@@ -158,7 +158,7 @@ export function CompanyJobs({ companyName }: CompanyJobsProps) {
         )}
         {!loading && (
         <>
-        <div className="space-y-4 max-w-6xl">
+        <div className="space-y-4 w-full">
           {filteredJobs.map((job, index) => (
             <div
               key={job.id}
@@ -217,7 +217,7 @@ export function CompanyJobs({ companyName }: CompanyJobsProps) {
 
         {/* Info Box */}
         {filteredJobs.length > 0 && (
-          <div className="mt-6 bg-blue-50 border-2 border-blue-200 rounded-lg p-4 max-w-6xl">
+          <div className="mt-6 bg-blue-50 border-2 border-blue-200 rounded-lg p-4 w-full">
             <h4 className="font-medium text-blue-900 mb-2">Read-Only View</h4>
             <p className="text-sm text-blue-800">
               This is a company-level overview. Jobs are managed by individual recruiters. 
