@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ArrowLeft, Plus, X, Trash2, ChevronDown } from 'lucide-react';
-import neurohireLogo from '@/assets/neurohire-logo.png';
+import neurohireLogo from '@/assets/neurohire-logo-2.png';
 
 interface AddJobProps {
   recruiterName: string;
@@ -159,7 +159,7 @@ export function AddJob({ recruiterName, recruiterId, onBack, onLogout }: AddJobP
       <nav className="bg-white px-8 py-6">
         <div className="flex items-center justify-between">
           {/* Left: Logo */}
-          <img src={neurohireLogo} alt="neurohire" className="h-8" />
+          <img src={neurohireLogo} alt="neurohire" className="h-10" />
 
           {/* Right: Avatar with Dropdown */}
           <div className="relative">

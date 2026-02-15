@@ -277,7 +277,7 @@ export function RecruiterDashboard({
 
       {/* Main Content */}
       {currentView === 'overview' ? (
-        <RecruiterOverview recruiterName={recruiterName} />
+        <RecruiterOverview recruiterName={recruiterName} recruiterId={recruiterId} />
       ) : (
         <div className="flex-1 flex flex-col">
           {/* Header */}

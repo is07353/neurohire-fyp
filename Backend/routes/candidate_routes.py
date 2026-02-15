@@ -203,6 +203,38 @@ async def candidate_overview(pool: asyncpg.Pool = Depends(get_db_pool)):
     }
 
 
+class ReviewInfoPayload(BaseModel):
+    """Payload from Review Your Information form (candidate confirms/edits extracted data)."""
+    fullName: str = ""
+    phone: str = ""
+    email: str = ""
+    address: str = ""
+
+
+@router.post("/candidate/review")
+async def candidate_review(
+    payload: ReviewInfoPayload,
+    pool: asyncpg.Pool = Depends(get_db_pool),
+):
+    """Save the candidate's reviewed/edited info to the candidates table. Uses latest application in this flow."""
+    app_id = _latest_application_id
+    if not app_id:
+        raise HTTPException(status_code=400, detail="No application in this flow. Upload a CV first.")
+    app_row = await application_repo.get_application_by_id(pool, app_id)
+    if not app_row:
+        raise HTTPException(status_code=404, detail="Application not found.")
+    candidate_id = app_row["candidate_id"]
+    await candidate_repo.update_candidate_review(
+        pool,
+        candidate_id,
+        full_name=payload.fullName,
+        email=payload.email,
+        phone=payload.phone,
+        address=payload.address,
+    )
+    return {"ok": True}
+
+
 @router.get("/candidate/analysis-status")
 async def candidate_analysis_status(pool: asyncpg.Pool = Depends(get_db_pool)):
     """

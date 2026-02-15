@@ -113,3 +113,28 @@ async def update_candidate_from_extraction(
             *args,
         )
 
+
+async def update_candidate_review(
+    pool: asyncpg.Pool,
+    candidate_id: int,
+    *,
+    full_name: str,
+    email: str,
+    phone: str,
+    address: str,
+) -> None:
+    """Update candidate with values from the Review Your Information form (saves to candidates table)."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            UPDATE candidates
+            SET full_name = $1, email = $2, phone = $3, address = $4
+            WHERE candidate_id = $5;
+            """,
+            (full_name or "").strip() or None,
+            (email or "").strip() or None,
+            (phone or "").strip() or None,
+            (address or "").strip() or None,
+            candidate_id,
+        )
+

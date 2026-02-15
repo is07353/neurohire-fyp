@@ -58,6 +58,8 @@ export function ReviewInformation({
   });
 
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Fetch extracted CV data from backend; poll a few times if still empty (analysis may be running)
   useEffect(() => {
@@ -110,6 +112,33 @@ export function ReviewInformation({
 
   const isFormComplete = info.fullName && info.phone && info.email && info.address;
   const noDetailsExtracted = !loading && !info.fullName && !info.phone && !info.email && !info.address;
+
+  const handleConfirmAndContinue = async () => {
+    if (!isFormComplete || saving) return;
+    setSaveError(null);
+    setSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/candidate/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fullName: info.fullName,
+          phone: info.phone,
+          email: info.email,
+          address: info.address,
+        }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { detail?: string };
+        throw new Error(typeof data.detail === 'string' ? data.detail : 'Failed to save');
+      }
+      onContinue();
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : 'Failed to save. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="py-8">
@@ -184,25 +213,32 @@ export function ReviewInformation({
           />
         </div>
       </div>
+
+      {saveError && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+          {saveError}
+        </div>
+      )}
       
       <div className="flex flex-col md:flex-row gap-4">
         <button
           onClick={onReupload}
-          className="flex-1 py-5 px-8 rounded-lg text-xl font-medium border-2 border-[#000000] text-[#000000] hover:bg-[#f5f5f5] transition-all"
+          disabled={saving}
+          className="flex-1 py-5 px-8 rounded-lg text-xl font-medium border-2 border-[#000000] text-[#000000] hover:bg-[#f5f5f5] transition-all disabled:opacity-50"
         >
           {t.reuploadButton}
         </button>
         
         <button
-          onClick={onContinue}
-          disabled={!isFormComplete}
+          onClick={handleConfirmAndContinue}
+          disabled={!isFormComplete || saving}
           className={`flex-1 py-5 px-8 rounded-lg text-xl font-medium transition-all ${
-            isFormComplete
+            isFormComplete && !saving
               ? 'bg-[#000000] text-white hover:bg-[#333333] active:bg-[#000000]'
               : 'bg-gray-300 text-gray-500 cursor-not-allowed'
           }`}
         >
-          {t.continueButton}
+          {saving ? (language === 'urdu' ? 'محفوظ ہو رہا ہے...' : 'Saving…') : t.continueButton}
         </button>
       </div>
     </div>

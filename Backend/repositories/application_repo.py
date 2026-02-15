@@ -55,6 +55,9 @@ async def list_applications_for_job(
                 ca.job_id,
                 ca.status,
                 COALESCE(c.full_name, 'Applicant') AS candidate_name,
+                c.email AS candidate_email,
+                c.phone AS candidate_phone,
+                c.address AS candidate_address,
                 aa.cv_score,
                 aa.video_score,
                 aa.total_score
@@ -73,6 +76,9 @@ async def list_applications_for_job(
             "job_id": r["job_id"],
             "status": r["status"],
             "candidate_name": r["candidate_name"] or "Applicant",
+            "candidate_email": r.get("candidate_email"),
+            "candidate_phone": r.get("candidate_phone"),
+            "candidate_address": r.get("candidate_address"),
             "cv_score": r["cv_score"],
             "video_score": r["video_score"],
             "total_score": r["total_score"],
@@ -352,4 +358,91 @@ async def count_applications_by_job(pool: asyncpg.Pool, job_ids: list[int]) -> d
             job_ids,
         )
     return {r["job_id"]: r["cnt"] for r in rows}
+
+
+async def get_recruiter_analytics(pool: asyncpg.Pool, recruiter_id: int) -> dict:
+    """Analytics for recruiter overview: total applicants, AI buckets, shortlisted, monthly applications."""
+    async with pool.acquire() as conn:
+        # Total applicants and buckets by total_score (from ai_assessments)
+        row = await conn.fetchrow(
+            """
+            SELECT
+                COUNT(*) AS total_applicants,
+                COUNT(*) FILTER (WHERE ca.status IN ('accepted', 'sent_to_interview')) AS shortlisted,
+                COUNT(*) FILTER (WHERE COALESCE(aa.total_score, -1) >= 85) AS strong_fit,
+                COUNT(*) FILTER (WHERE COALESCE(aa.total_score, -1) >= 75 AND COALESCE(aa.total_score, -1) < 85) AS good_fit,
+                COUNT(*) FILTER (WHERE COALESCE(aa.total_score, -1) >= 65 AND COALESCE(aa.total_score, -1) < 75) AS needs_review,
+                COUNT(*) FILTER (WHERE COALESCE(aa.total_score, -1) < 65 OR aa.total_score IS NULL) AS low_fit
+            FROM candidate_applications ca
+            INNER JOIN jobs j ON j.job_id = ca.job_id
+            LEFT JOIN ai_assessments aa ON aa.application_id = ca.application_id
+            WHERE j.recruiter_id = $1;
+            """,
+            recruiter_id,
+        )
+        if not row:
+            return _empty_recruiter_analytics()
+
+        total_applicants = row["total_applicants"] or 0
+        shortlisted = row["shortlisted"] or 0
+        strong_fit = row["strong_fit"] or 0
+        good_fit = row["good_fit"] or 0
+        needs_review = row["needs_review"] or 0
+        low_fit = row["low_fit"] or 0
+        recommended_by_ai = strong_fit + good_fit
+
+        # Monthly applications (last 12 months by created_at)
+        monthly = await conn.fetch(
+            """
+            SELECT
+                date_trunc('month', ca.created_at)::date AS month_start,
+                COUNT(*)::int AS applications
+            FROM candidate_applications ca
+            INNER JOIN jobs j ON j.job_id = ca.job_id
+            WHERE j.recruiter_id = $1
+            GROUP BY date_trunc('month', ca.created_at)
+            ORDER BY month_start DESC
+            LIMIT 12;
+            """,
+            recruiter_id,
+        )
+    month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    monthly_trends = []
+    for r in reversed(list(monthly)):
+        dt = r.get("month_start")
+        if dt and hasattr(dt, "month"):
+            label = month_names[dt.month - 1]
+        else:
+            label = "?"
+        monthly_trends.append({"month": label, "applications": r.get("applications") or 0})
+
+    return {
+        "total_applicants": total_applicants,
+        "recommended_by_ai": recommended_by_ai,
+        "needs_review": needs_review,
+        "shortlisted": shortlisted,
+        "ai_recommendation_distribution": [
+            {"name": "Strong Fit", "value": strong_fit, "color": "#10b981"},
+            {"name": "Good Fit", "value": good_fit, "color": "#3b82f6"},
+            {"name": "Needs Review", "value": needs_review, "color": "#f59e0b"},
+            {"name": "Low Fit", "value": low_fit, "color": "#ef4444"},
+        ],
+        "monthly_applications": monthly_trends,
+    }
+
+
+def _empty_recruiter_analytics() -> dict:
+    return {
+        "total_applicants": 0,
+        "recommended_by_ai": 0,
+        "needs_review": 0,
+        "shortlisted": 0,
+        "ai_recommendation_distribution": [
+            {"name": "Strong Fit", "value": 0, "color": "#10b981"},
+            {"name": "Good Fit", "value": 0, "color": "#3b82f6"},
+            {"name": "Needs Review", "value": 0, "color": "#f59e0b"},
+            {"name": "Low Fit", "value": 0, "color": "#ef4444"},
+        ],
+        "monthly_applications": [],
+    }
 

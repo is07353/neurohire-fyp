@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { User, CheckCircle, XCircle, ChevronDown, ArrowLeft, AlertTriangle, Download, Brain, ChevronLeft, ChevronRight } from 'lucide-react';
-import neurohireLogo from '@/assets/neurohire-logo.png';
+import neurohireLogo from '@/assets/neurohire-logo-2.png';
 import type { Applicant, Job } from '../../App';
 
 const API_BASE =
@@ -190,7 +190,7 @@ export function CandidateReview({
     <div className="min-h-screen bg-gray-50">
       <nav className="bg-white px-8 py-6 shadow-sm">
         <div className="flex items-center justify-between">
-          <img src={neurohireLogo} alt="neurohire" className="h-8" />
+          <img src={neurohireLogo} alt="neurohire" className="h-10" />
           <div className="relative">
             <button
               onClick={() => setShowDropdown(!showDropdown)}
@@ -218,15 +218,18 @@ export function CandidateReview({
         </div>
       </nav>
 
-      <div className="max-w-7xl mx-auto px-8 py-8">
+      {/* Back to Applicants - below neurohire logo (same px-8 as EditJob) */}
+      <div className="px-8 pt-2 pb-4">
         <button
           onClick={onBack}
-          className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors mb-6 text-sm"
+          className="flex items-center gap-2 text-gray-600 hover:text-[#000000] transition-colors text-sm"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Back to Applicants</span>
         </button>
+      </div>
 
+      <div className="max-w-7xl mx-auto px-8 py-8">
         <div className="mb-6">
           <h1 className="text-3xl font-semibold text-gray-900 mb-1">
             Applicant

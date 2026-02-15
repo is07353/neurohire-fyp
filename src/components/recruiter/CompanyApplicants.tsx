@@ -1,6 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, Filter, Users, Briefcase } from 'lucide-react';
-import neurohireLogo from '@/assets/neurohire-logo.png';
+import neurohireLogo from '@/assets/neurohire-logo-2.png';
+
+const API_BASE =
+  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
+  'http://127.0.0.1:8000';
 
 interface CompanyApplicantsProps {
   companyName: string;
@@ -16,86 +20,51 @@ interface JobApplicantData {
   postedDate: string;
 }
 
-const mockJobApplicants: JobApplicantData[] = [
-  {
-    jobId: '1',
-    jobTitle: 'Store Worker – Branch 1',
-    location: 'Gulberg, Lahore',
-    recruiterName: 'Ahmed Khan',
-    applicantCount: 24,
-    status: 'open',
-    postedDate: 'Jan 28, 2026',
-  },
-  {
-    jobId: '2',
-    jobTitle: 'Cashier – DHA Branch',
-    location: 'DHA, Karachi',
-    recruiterName: 'Sara Ali',
-    applicantCount: 18,
-    status: 'open',
-    postedDate: 'Jan 30, 2026',
-  },
-  {
-    jobId: '3',
-    jobTitle: 'Delivery Rider – F-7',
-    location: 'F-7, Islamabad',
-    recruiterName: 'Usman Malik',
-    applicantCount: 32,
-    status: 'closed',
-    postedDate: 'Jan 25, 2026',
-  },
-  {
-    jobId: '4',
-    jobTitle: 'Store Worker – Saddar',
-    location: 'Saddar, Rawalpindi',
-    recruiterName: 'Ahmed Khan',
-    applicantCount: 15,
-    status: 'open',
-    postedDate: 'Feb 1, 2026',
-  },
-  {
-    jobId: '5',
-    jobTitle: 'Customer Service Representative',
-    location: 'Johar Town, Lahore',
-    recruiterName: 'Sara Ali',
-    applicantCount: 21,
-    status: 'open',
-    postedDate: 'Feb 2, 2026',
-  },
-  {
-    jobId: '6',
-    jobTitle: 'Warehouse Assistant',
-    location: 'North Nazimabad, Karachi',
-    recruiterName: 'Hassan Raza',
-    applicantCount: 12,
-    status: 'open',
-    postedDate: 'Feb 3, 2026',
-  },
-  {
-    jobId: '7',
-    jobTitle: 'Sales Associate – Mall Branch',
-    location: 'Centaurus Mall, Islamabad',
-    recruiterName: 'Usman Malik',
-    applicantCount: 28,
-    status: 'open',
-    postedDate: 'Jan 29, 2026',
-  },
-  {
-    jobId: '8',
-    jobTitle: 'Kitchen Helper',
-    location: 'Clifton, Karachi',
-    recruiterName: 'Hassan Raza',
-    applicantCount: 9,
-    status: 'closed',
-    postedDate: 'Jan 27, 2026',
-  },
-];
+function formatPostedDate(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch {
+    return iso;
+  }
+}
 
 export function CompanyApplicants({ companyName }: CompanyApplicantsProps) {
-  const [jobApplicants] = useState<JobApplicantData[]>(mockJobApplicants);
+  const [jobApplicants, setJobApplicants] = useState<JobApplicantData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [recruiterFilter, setRecruiterFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'closed'>('all');
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    const params = new URLSearchParams({ company_name: companyName });
+    fetch(`${API_BASE}/company/jobs-with-applicant-counts?${params}`)
+      .then((res) => (res.ok ? res.json() : { jobs: [] }))
+      .then((data: { jobs: Array<{ id: string; title: string; location: string; recruiter_name: string; applicant_count: number; status: string; created_at: string }> }) => {
+        if (cancelled) return;
+        const mapped: JobApplicantData[] = (data.jobs || []).map((j) => ({
+          jobId: j.id,
+          jobTitle: j.title,
+          location: j.location || '—',
+          recruiterName: j.recruiter_name || 'Recruiter',
+          applicantCount: typeof j.applicant_count === 'number' ? j.applicant_count : 0,
+          status: j.status === 'open' ? 'open' : 'closed',
+          postedDate: formatPostedDate(j.created_at),
+        }));
+        setJobApplicants(mapped);
+      })
+      .catch(() => {
+        if (!cancelled) setError('Failed to load applicants overview');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [companyName]);
 
   // Get unique recruiter names
   const uniqueRecruiters = Array.from(new Set(jobApplicants.map(job => job.recruiterName)));
@@ -114,6 +83,23 @@ export function CompanyApplicants({ companyName }: CompanyApplicantsProps) {
 
   const totalApplicants = filteredJobs.reduce((sum, job) => sum + job.applicantCount, 0);
 
+  if (loading) {
+    return (
+      <div className="flex-1 flex flex-col">
+        <header className="bg-white border-b border-gray-200 px-8 py-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl text-gray-800">Applicants Overview</h1>
+              <p className="text-sm text-gray-600 mt-1">View applicant counts across all jobs</p>
+            </div>
+            <img src={neurohireLogo} alt="NeuroHire" className="h-10" />
+          </div>
+        </header>
+        <div className="flex-1 px-8 py-12 text-center text-gray-500">Loading applicants overview…</div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 flex flex-col">
       {/* Header */}
@@ -123,12 +109,15 @@ export function CompanyApplicants({ companyName }: CompanyApplicantsProps) {
             <h1 className="text-2xl text-gray-800">Applicants Overview</h1>
             <p className="text-sm text-gray-600 mt-1">View applicant counts across all jobs</p>
           </div>
-          <img src={neurohireLogo} alt="NeuroHire" className="h-8" />
+          <img src={neurohireLogo} alt="NeuroHire" className="h-10" />
         </div>
       </header>
 
       {/* Summary Cards */}
       <div className="bg-white border-b border-gray-200 px-8 py-6">
+        {error && (
+          <div className="mb-4 text-red-600 text-sm">{error}</div>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Total Applicants */}
           <div className="bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-200 rounded-lg p-6">
