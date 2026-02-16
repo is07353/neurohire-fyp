@@ -178,6 +178,57 @@ async def upsert_cv_jd_assessment(
         )
 
 
+async def upsert_speech_assessment_and_tag(
+    pool: asyncpg.Pool,
+    application_id: int,
+    *,
+    confidence_score: int | None,
+    clarity: int | None,
+    answer_relevance: int | None,
+    speech_analysis: str | None,
+    speech_llm_output: dict | None,
+    tag_needs_review: bool,
+) -> None:
+    """Update ai_assessments with speech / video interview LLM outputs and tag candidate_applications if needed."""
+    speech_llm_output_json = json.dumps(speech_llm_output) if speech_llm_output is not None else None
+    async with pool.acquire() as conn:
+        existing = await conn.fetchval(
+            "SELECT assessment_id FROM ai_assessments WHERE application_id = $1;",
+            application_id,
+        )
+        if not existing:
+            await conn.execute(
+                "INSERT INTO ai_assessments (application_id) VALUES ($1);",
+                application_id,
+            )
+        await conn.execute(
+            """
+            UPDATE ai_assessments SET
+                confidence_score = $2,
+                clarity = $3,
+                answer_relevance = $4,
+                speech_analysis = $5,
+                speech_llm_output = $6::jsonb
+            WHERE application_id = $1;
+            """,
+            application_id,
+            confidence_score,
+            clarity,
+            answer_relevance,
+            speech_analysis,
+            speech_llm_output_json,
+        )
+        await conn.execute(
+            """
+            UPDATE candidate_applications
+            SET tag_needs_review = $2
+            WHERE application_id = $1;
+            """,
+            application_id,
+            tag_needs_review,
+        )
+
+
 async def upsert_dummy_ai_assessment(
     pool: asyncpg.Pool,
     application_id: int,

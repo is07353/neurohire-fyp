@@ -66,7 +66,14 @@ async def list_by_application(pool: asyncpg.Pool, application_id: int) -> list[d
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT question_index, question_text, video_url, video_score
+            SELECT
+                question_index,
+                question_text,
+                video_url,
+                audio_transcript,
+                face_presence_ratio,
+                "camera_engagement_Ratio",
+                yaw_variance
             FROM video_submissions
             WHERE application_id = $1
             ORDER BY question_index;
@@ -74,4 +81,37 @@ async def list_by_application(pool: asyncpg.Pool, application_id: int) -> list[d
             application_id,
         )
     return [dict(r) for r in rows]
+
+
+async def update_video_analysis_fields(
+    pool: asyncpg.Pool,
+    *,
+    application_id: int,
+    question_index: int,
+    audio_transcript: str | None,
+    face_presence_ratio: float | None,
+    camera_engagement_Ratio: float | None,
+    yaw_variance: float | None,
+) -> None:
+    """Update per-question analysis fields (transcript + engagement metrics) for a video submission."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            UPDATE video_submissions
+            SET
+                audio_transcript = $3,
+                face_presence_ratio = $4,
+                "camera_engagement_Ratio" = $5,
+                yaw_variance = $6
+            WHERE application_id = $1
+              AND question_index = $2;
+            """,
+            application_id,
+            question_index,
+            audio_transcript,
+            face_presence_ratio,
+            camera_engagement_Ratio,
+            yaw_variance,
+        )
+
 

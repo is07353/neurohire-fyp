@@ -9,6 +9,10 @@ from repositories import candidate_repo, job_repo, cv_repo, application_repo, vi
 from cv_storage import download_and_save_cv
 from video_storage import download_and_save_video
 from services.cv_analysis_client import run_cv_jd_analysis
+from services.video_analysis_client import (
+    run_video_full_pipeline,
+    extract_video_metrics,
+)
 
 router = APIRouter()
 
@@ -347,8 +351,89 @@ async def receive_cv_url(
     }
 
 
+async def _analyze_video_and_update_db(
+    app,
+    *,
+    application_id: int,
+    question_index: int,
+    question_text: str,
+    video_url: str,
+) -> None:
+    """
+    Background task:
+    - download video file
+    - call Gradio video pipeline
+    - update ai_assessments, candidate_applications.tag_needs_review,
+      and per-question metrics in video_submissions.
+    """
+    pool = app.state.db_pool
+    try:
+        path = download_and_save_video(video_url, application_id, question_index)
+    except Exception as e:
+        print(
+            "[video_analysis] Failed to download video",
+            {"application_id": application_id, "question_index": question_index, "error": str(e)},
+        )
+        return
+
+    # Get job title / role for this application (may be used by the model as "role").
+    role = ""
+    try:
+        app_row = await application_repo.get_application_by_id(pool, application_id)
+        if app_row:
+            job_row = await job_repo.get_job_by_id(pool, app_row["job_id"])
+            if job_row:
+                role = job_row.get("title") or job_row.get("job_title") or ""
+    except Exception as e:
+        print(f"[video_analysis] Failed to fetch job role for application_id={application_id}: {e}")
+
+    analysis_raw = run_video_full_pipeline(path, role=role, question=question_text)
+    print(
+        "[video_analysis] Normalized analysis",
+        {"application_id": application_id, "question_index": question_index, "analysis": analysis_raw},
+    )
+
+    metrics = extract_video_metrics(analysis_raw)
+
+    # Update per-question metrics in video_submissions
+    try:
+        await video_repo.update_video_analysis_fields(
+            pool,
+            application_id=application_id,
+            question_index=question_index,
+            audio_transcript=metrics.get("transcript"),
+            face_presence_ratio=metrics.get("face_presence_ratio"),
+            camera_engagement_Ratio=metrics.get("camera_engagement_Ratio"),
+            yaw_variance=metrics.get("yaw_variance"),
+        )
+    except Exception as e:
+        print(
+            "[video_analysis] Failed to update video_submissions",
+            {"application_id": application_id, "question_index": question_index, "error": str(e)},
+        )
+
+    # Update ai_assessments + tag_needs_review at application level
+    try:
+        await application_repo.upsert_speech_assessment_and_tag(
+            pool,
+            application_id,
+            confidence_score=metrics.get("visual_confidence_score"),
+            clarity=metrics.get("clarity"),
+            answer_relevance=metrics.get("relevance"),
+            speech_analysis=metrics.get("summary"),
+            speech_llm_output=analysis_raw,
+            tag_needs_review=metrics.get("needs_review", False),
+        )
+    except Exception as e:
+        print(
+            "[video_analysis] Failed to update ai_assessments / candidate_applications",
+            {"application_id": application_id, "error": str(e)},
+        )
+
+
 @router.post("/candidate/video-url")
 async def receive_video_url(
+    request: Request,
     payload: VideoUrlPayload,
     pool: asyncpg.Pool = Depends(get_db_pool),
     background_tasks: BackgroundTasks = None,
@@ -358,7 +443,10 @@ async def receive_video_url(
     video_submissions for the most recent application in this flow.
 
     We assume that the CV upload step has already created a candidate
-    application and set _latest_application_id.
+    application and set _latest_application_id. In the background we also:
+    - download the video file
+    - send it to the Gradio video+speech pipeline
+    - update ai_assessments + candidate_applications + video_submissions with analysis fields.
     """
     if _latest_application_id is None:
         raise HTTPException(
@@ -388,14 +476,14 @@ async def receive_video_url(
         mime_type=payload.mime_type,
     )
 
-    # Download the actual video file in the background and store it locally
-    # under Backend/videos_application for later analysis.
     if background_tasks is not None:
         background_tasks.add_task(
-            download_and_save_video,
-            payload.file_url,
-            application_id,
-            payload.question_index,
+            _analyze_video_and_update_db,
+            request.app,
+            application_id=application_id,
+            question_index=payload.question_index,
+            question_text=payload.question_text,
+            video_url=payload.file_url,
         )
 
     return {
@@ -404,3 +492,4 @@ async def receive_video_url(
         "question_index": payload.question_index,
         "video": video_record,
     }
+
