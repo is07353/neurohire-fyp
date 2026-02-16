@@ -70,7 +70,7 @@ def _normalize_result(raw: Any) -> dict[str, Any]:
             out["address"] = _str(v)
         elif k_lower == "name":
             out["name"] = _str(v)
-        elif k_lower == "phone_number":
+        elif k_lower == "phone_number" or k_lower == "phone":
             out["phone_number"] = _str(v)
         elif k_lower == "matching_analysis":
             out["matching_analysis"] = v if isinstance(v, list) else ([v] if v else [])

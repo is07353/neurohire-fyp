@@ -247,8 +247,10 @@ model video_submissions {
   mime_type       String?
   created_at      DateTime @default(now())
   audio_transcript String?
-  video_score     Int?
-  quality_flag    String?
+  // Computer vision / engagement metrics
+  face_presence_ratio     Float?
+  camera_engagement_Ratio Float?
+  yaw_variance            Float?
 
   candidate_applications candidate_applications @relation("ApplicationVideoSubmissions", fields: [application_id], references: [application_id], onDelete: Cascade)
 

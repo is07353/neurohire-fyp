@@ -1,166 +1,247 @@
+# NeuroHire – Full Stack Setup Guide
 
-  #python -m uvicorn main:app --reload --port 8000
-  #npm run uploadthing-server
-  # npm run dev
+This project includes:
 
- DATABASE_URL=postgresql://neondb_owner:npg_7Yzfsr8QoSkI@ep-raspy-bar-a1doe4s3-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+- ⚛️ React (Vite) frontend  
+- 🚀 FastAPI backend  
+- 🐘 Neon PostgreSQL database  
+- 📦 UploadThing file storage (CV + Video)
 
- UPLOADTHING_TOKEN='eyJhcGlLZXkiOiJza19saXZlXzc5ZWVhMmFkZTg1MmZjNjMwYjI3OTlkY2RlYWFkNzc0NWZlZTM4ZTY0N2Y1OGViNTRkNTg1MDM5NTRkNGJhMzYiLCJhcHBJZCI6Inpqd3RkNzllcTIiLCJyZWdpb25zIjpbInNlYTEiXX0='
+---
 
-python -m pip install fastapi uvicorn asyncpg python-dotenv requests
-python -m pip install email-validator
-pip install gradio_client
+## ⚠️ IMPORTANT – Environment Variables
 
-  # NeuroHire – Frontend, Backend & DB Setup
+Create a `.env` file in the **project root**.
 
-  This project contains a React (Vite) frontend, a FastAPI backend, and a Neon PostgreSQL database.  
-  The original design was based on: https://www.figma.com/design/I5Cxf5xRjHc9JMmuw9ZH5D/Candidate-Dashboard-Design--Copy-.
+- ❌ Do **NOT** commit this file.  
+- ❌ Do **NOT** paste secrets into this README.
 
-  ---
+**Example `.env`** (use your own values):
 
-  ## 1. Prerequisites
+```env
+DATABASE_URL=postgresql://neondb_owner:npg_7Yzfsr8QoSkI@ep-raspy-bar-a1doe4s3-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require 
+UPLOADTHING_TOKEN='eyJhcGlLZXkiOiJza19saXZlXzc5ZWVhMmFkZTg1MmZjNjMwYjI3OTlkY2RlYWFkNzc0NWZlZTM4ZTY0N2Y1OGViNTRkNTg1MDM5NTRkNGJhMzYiLCJhcHBJZCI6Inpqd3RkNzllcTIiLCJyZWdpb25zIjpbInNlYTEiXX0='
+```
 
-  Install these tools first:
+Required variables:
 
-  - **Node.js** (LTS) – includes `npm`
-  - **Python 3.10+**
-  - **Git**
-  - A **Neon PostgreSQL** project (database) with a connection string
+| Variable | Description |
+|----------|-------------|
+| `DATABASE_URL` | Neon PostgreSQL connection string |
+| `UPLOADTHING_TOKEN` | UploadThing API secret (for CV + video uploads) |
 
-  ---
+Ensure `.env` is listed in `.gitignore`.
 
-  ## 2. Clone and install frontend dependencies
+---
 
-  ```bash
-  git clone <this-repo-url>
-  cd neurohire-fyp
-  npm install
-  ```
+## 1️⃣ Prerequisites
 
-  To run the React app:
+Install:
 
-  ```bash
-  npm run dev
-  ```
+- **Node.js** (LTS)
+- **Python 3.10+**
+- **Git**
+- **Neon PostgreSQL** project
+- **UploadThing** account
 
-  The frontend is a Vite app; by default it runs on `http://localhost:5173` (or the port Vite prints).
+---
 
-  ---
+## 2️⃣ Frontend Setup (React + Vite)
 
-  ## 3. Configure Neon database via `.env`
+From project root:
 
-  1. In the project root (`neurohire-fyp`), create a file named `.env`.
-  2. Put only the URL portion into `.env` as `DATABASE_URL`:
+```bash
+npm install
+npm run dev
+```
 
-     ```bash
-     DATABASE_URL=postgresql://neondb_owner:npg_7Yzfsr8QoSkI@ep-raspy-bar-a1doe4s3-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
-     ```
+Frontend runs on:
 
-  4. The `.gitignore` is already configured to ignore `.env` so secrets are not committed.
+**http://localhost:3000**
 
-  ---
+(Vite may use a different port if 3000 is in use; check the terminal output.)
 
-  ## 4. FastAPI backend setup (Neon connection)
+---
 
-  Backend code lives in `Backend/main.py`.
+## 3️⃣ Backend Setup (FastAPI)
 
-  From the project root:
+Navigate to the backend folder:
 
-  ```bash
-  cd Backend
-  pip install fastapi uvicorn asyncpg python-dotenv
-  ```
+```bash
+cd Backend
+```
 
-  Notes:
+Install required Python packages:
 
-  - If `pip` is not recognized, use `python -m pip install ...`.
-  - If you use a virtual environment, activate it first and then run the install command.
+```bash
+python -m pip install fastapi uvicorn asyncpg python-dotenv requests email-validator gradio_client
+```
 
-  To start the backend:
+If using a virtual environment (recommended):
 
-  ```bash
-  uvicorn main:app --reload
-  ```
+```bash
+python -m venv venv
+venv\Scripts\activate        # Windows
+source venv/bin/activate     # Mac/Linux
+```
 
-  The API will run on `http://127.0.0.1:8000`.
+Then run the install command above from inside the activated venv.
 
-  ### 4.1 Verify DB connection
+### ▶ Run Backend
 
-  The backend creates a connection pool to Neon using the `DATABASE_URL` from `.env` and exposes a simple health endpoint.
+From `Backend/`:
 
-  With the backend running, open:
+```bash
+python -m uvicorn main:app --reload --port 8000
+```
 
-  - `http://127.0.0.1:8000/db-health`
+Backend runs on:
 
-  You should receive:
+**http://127.0.0.1:8000**
 
-  ```json
-  { "ok": 1 }
-  ```
+---
 
-  This confirms that the backend can connect to the Neon database using the `.env` file.
+## ✅ Verify Database Connection
 
-  You can also open the automatic API docs at:
+With the backend running, open:
 
-  - `http://127.0.0.1:8000/docs`
+**http://127.0.0.1:8000/health**  
+or  
+**http://127.0.0.1:8000/db-health**
 
-  ---
+Expected response:
 
-  ## 5. Prisma + Neon (Node.js) setup
+```json
+{ "ok": 1 }
+```
 
-  Prisma is optional and used if you want a Node-based backend or tooling layer talking to the same Neon database.
+API documentation:
 
-  From the project root:
+**http://127.0.0.1:8000/docs**
 
-  ```bash
-  cd neurohire-fyp  # if you are not already here
-  npm install prisma --save-dev
-  npm install @prisma/client
-  ```
+---
 
-  Then initialize Prisma:
+## 4️⃣ UploadThing Setup
 
-  ```bash
-  npx prisma init
-  ```
+If using the UploadThing server:
 
-  - This creates a `prisma/` folder with `schema.prisma`.
-  - Ensure `.env` still contains your `DATABASE_URL` pointing to Neon.
+```bash
+npm run uploadthing-server
+```
 
-  ### 5.1 Introspect or sync schema
+Ensure:
 
-  - To introspect an existing database schema into Prisma models:
+- `UPLOADTHING_TOKEN` is set in `.env`
+- Backend saves only file **metadata** (URL + file key)
+- Files are **not** stored in the database
 
-    ```bash
-    npx prisma db pull
-    ```
+---
 
-  - After you define or change models in `prisma/schema.prisma`, sync them to the database and regenerate the client:
+## 5️⃣ Prisma Setup (If Using Prisma)
 
-    ```bash
-    npx prisma db push
-    npx prisma generate
-    ```
+From project root:
 
-  ### 5.2 Inspect database with Prisma Studio
+```bash
+npm install prisma --save-dev
+npm install @prisma/client
+```
 
-  Run:
+Initialize Prisma (if not already):
 
-  ```bash
-  npx prisma studio
-  ```
+```bash
+npx prisma init
+```
 
-  This opens a web UI where you can view and edit tables in your Neon database.
+Sync schema:
 
-  ---
+```bash
+npx prisma db push
+npx prisma generate
+```
 
-  ## 6. Summary – what needs to be installed
+Open Prisma Studio:
 
-  - **Node.js** (to run the React/Vite frontend and Prisma)
-  - **Python 3.10+** (to run the FastAPI backend)
-  - **Neon PostgreSQL** project with a connection string
-  - **Python packages**: `fastapi`, `uvicorn`, `asyncpg`, `python-dotenv`
-  - **Node packages**:
-    - Runtime/dev: those listed in `package.json` (installed via `npm install`)
-    - Optional DB tooling: `prisma` (dev dependency) and `@prisma/client`
-  
+```bash
+npx prisma studio
+```
+
+---
+
+## 6️⃣ Full System Run Order
+
+1. **Start backend** (from `Backend/`):
+
+   ```bash
+   python -m uvicorn main:app --reload --port 8000
+   ```
+
+2. **Start UploadThing** (if required, from project root):
+
+   ```bash
+   npm run uploadthing-server
+   ```
+
+3. **Start frontend** (from project root):
+
+   ```bash
+   npm run dev
+   ```
+
+---
+
+## 7️⃣ Architecture Overview
+
+**System flow:**
+
+```
+Frontend
+   ↓
+UploadThing (stores file)
+   ↓
+Backend saves metadata to DB
+   ↓
+AI Model fetches file using URL
+   ↓
+Scores stored in DB
+```
+
+Only **file metadata** is stored in the database:
+
+- File URL  
+- File key  
+- File size  
+- MIME type  
+
+No binary files are stored in PostgreSQL.
+
+---
+
+## 8️⃣ Required Dependencies
+
+**Python**
+
+- fastapi  
+- uvicorn  
+- asyncpg  
+- python-dotenv  
+- requests  
+- email-validator  
+- gradio_client  
+
+**Node**
+
+- react  
+- vite  
+- prisma  
+- @prisma/client  
+- uploadthing  
+- @uploadthing/react  
+
+---
+
+## 🔐 Security Reminder
+
+- Never commit `.env`
+- Never expose `DATABASE_URL`
+- Never expose `UPLOADTHING_TOKEN`
+- Rotate secrets immediately if leaked
