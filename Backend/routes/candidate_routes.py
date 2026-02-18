@@ -244,11 +244,14 @@ async def candidate_analysis_status(pool: asyncpg.Pool = Depends(get_db_pool)):
     """
     Return whether CV+JD analysis is still pending for the latest application.
     Used by the processing screen to wait until the API has responded.
+    When app_id is not set yet (cv-url still processing), return pending=True so
+    the UI keeps waiting instead of jumping to review.
     On DB timeout or error we return pending=False so the loading screen can exit.
     """
     app_id = _latest_application_id
     if not app_id:
-        return {"pending": False}
+        # CV URL may not be processed yet; keep showing processing until we have an application
+        return {"pending": True}
     try:
         pending = not await asyncio.wait_for(
             cv_repo.is_analysis_complete_for_application(pool, app_id),
@@ -280,12 +283,12 @@ def get_candidate_selected_job(session_id: str = ""):
     return {"selected_job": data}
 
 
-@router.post("/candidate/cv-url")
+@router.post("/candidate/cv-url", response_model=None)
 async def receive_cv_url(
     request: Request,
     payload: CVUrlPayload,
+    background_tasks: BackgroundTasks,
     pool: asyncpg.Pool = Depends(get_db_pool),
-    background_tasks: BackgroundTasks = None,
 ):
     """
     Receive the uploaded CV URL from the frontend and:
@@ -332,16 +335,15 @@ async def receive_cv_url(
         file_size=payload.file_size,
         mime_type=payload.mime_type,
     )
-    # 4) Background: download CV, run Gradio CV+JD analysis, update candidate + cv_data
-    if background_tasks is not None:
-        background_tasks.add_task(
-            _download_and_analyze_cv,
-            request.app,
-            payload.file_url,
-            application["application_id"],
-            candidate["candidate_id"],
-            job_description,
-        )
+    # 4) Background: download CV, run CV+JD analysis API, update candidate + cv_data
+    background_tasks.add_task(
+        _download_and_analyze_cv,
+        request.app,
+        payload.file_url,
+        application["application_id"],
+        candidate["candidate_id"],
+        job_description,
+    )
 
     return {
         "ok": True,

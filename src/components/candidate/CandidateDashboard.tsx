@@ -91,15 +91,7 @@ export function CandidateDashboard({ onBackToLanding }: CandidateDashboardProps)
   const handleCVContinue = () => {
     if (cvFile) {
       setIsProcessingCV(true);
-      // Simulate CV processing - extract data after delay
-      setTimeout(() => {
-        setCandidateInfo({
-          fullName: 'Ali Ahmed',
-          phone: '+92 300 1234567',
-          email: 'ali.ahmed@example.com',
-          address: 'Gulberg, Lahore, Punjab',
-        });
-      }, 500);
+      // CVProcessingScreen polls /candidate/analysis-status and calls onComplete when backend has finished CV analysis
     }
   };
 

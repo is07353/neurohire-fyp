@@ -43,9 +43,9 @@ export function CVUpload({ language, cvFile, onCVUpload, onContinue }: CVUploadP
   const { startUpload, isUploading } = useUploadThing('mediaUploader', {
     onClientUploadComplete: (res) => {
       console.log('[UploadThing] Client upload complete:', res);
-      setUploadComplete(true);
 
-      // Send the uploaded file URL + basic metadata to the FastAPI backend
+      // Send the uploaded file URL to the backend and only mark complete when the server has accepted it.
+      // That way when the user clicks Continue, analysis-status will have an application_id to poll.
       try {
         const first = Array.isArray(res) ? res[0] : undefined;
         const url = first?.url as string | undefined;
@@ -58,12 +58,19 @@ export function CVUpload({ language, cvFile, onCVUpload, onContinue }: CVUploadP
               file_size: cvFile?.size ?? null,
               mime_type: cvFile?.type ?? null,
             }),
-          }).catch(() => {
-            // Ignore errors; this call is best-effort
-          });
+          })
+            .then((r) => {
+              if (r.ok) setUploadComplete(true);
+            })
+            .catch(() => {
+              // Still allow continue so user is not stuck
+              setUploadComplete(true);
+            });
+        } else {
+          setUploadComplete(true);
         }
       } catch {
-        // Swallow any unexpected errors in dev
+        setUploadComplete(true);
       }
     },
     onUploadError: (error) => {

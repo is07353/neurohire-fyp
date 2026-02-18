@@ -4,11 +4,13 @@ Client for the Gradio-hosted CV + Job Description analysis API.
 Calls /process_cv with the applicant's CV file and job description;
 returns normalized extraction + analysis. Retries (up to 4 attempts) when
 the model raw output contains "Model output could not be parsed as JSON"
-or "JSON parse failed".
+or "JSON parse failed". Uses a long timeout and retries on connection
+disconnect so the remote model server has time to respond.
 """
 
 import json
 import re
+import time
 from pathlib import Path
 from typing import Any
 
@@ -16,14 +18,30 @@ from typing import Any
 from gradio_client import Client, handle_file
 
 # Default Gradio app URL (can be overridden via env)
-GRADIO_APP_URL = "https://d1808ddf3a6a5c44c5.gradio.live/"
+GRADIO_APP_URL = "https://bf82a38d7c57881ecc.gradio.live"
 API_NAME = "/process_cv"
 MAX_RETRIES = 4
+# Timeout in seconds for Gradio HTTP calls (model inference can be slow)
+GRADIO_TIMEOUT = 300
+# Delay between retries on connection disconnect/timeout
+CONNECT_RETRY_DELAY_SEC = 5
 # Phrases in model raw output that trigger a retry (call API again instead of proceeding)
 PARSE_ERROR_STRINGS = (
     "Model output could not be parsed as JSON",
     "JSON parse failed",
 )
+
+
+def _is_connection_error(exc: BaseException) -> bool:
+    """True if the exception looks like a disconnect/timeout/connection failure."""
+    msg = (getattr(exc, "message", None) or str(exc)).lower()
+    errname = type(exc).__name__.lower()
+    return (
+        "disconnect" in msg or "connection" in msg or "timeout" in msg
+        or "reset" in msg or "closed" in msg or "refused" in msg
+        or "readtimeout" in errname or "connecttimeout" in errname
+        or "connectionerror" in errname or "remoteerror" in errname
+    )
 
 
 def _should_retry(result: Any) -> bool:
@@ -160,7 +178,7 @@ def run_cv_jd_analysis(
             "error": "CV file not found",
         }
 
-    client = Client(api_url)
+    client = Client(api_url, httpx_kwargs={"timeout": GRADIO_TIMEOUT})
     last_result: Any = None
     last_error: Exception | None = None
 
@@ -183,7 +201,10 @@ def run_cv_jd_analysis(
             return _normalize_result(result)
         except Exception as e:
             last_error = e
+            if _is_connection_error(e):
+                print("[cv_analysis] Connection error (attempt {}): {}; will retry.".format(attempt + 1, e))
             if attempt < max_retries - 1:
+                time.sleep(CONNECT_RETRY_DELAY_SEC)
                 continue
             return {
                 "name": "",
