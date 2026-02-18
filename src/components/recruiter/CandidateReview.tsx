@@ -40,7 +40,18 @@ export function CandidateReview({
   const [reviewData, setReviewData] = useState<ReviewData | null>(null);
   const [reviewLoading, setReviewLoading] = useState(true);
   const [jobQuestions, setJobQuestions] = useState<string[]>([]);
-  const [videoSubmissions, setVideoSubmissions] = useState<Array<{ question_index: number; question_text: string; video_url: string; video_score: number | null }>>([]);
+  const [videoSubmissions, setVideoSubmissions] = useState<
+    Array<{
+      question_index: number;
+      question_text: string;
+      video_url: string;
+      video_score: number | null;
+      confidence_score?: number | null;
+      clarity?: number | null;
+      answer_relevance?: number | null;
+      speech_analysis?: string | null;
+    }>
+  >([]);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [cvUrl, setCvUrl] = useState<string | null>(null);
 
@@ -91,9 +102,22 @@ export function CandidateReview({
     let cancelled = false;
     fetch(`${API_BASE}/recruiter/applications/${applicationId}/video-submissions`)
       .then((res) => (res.ok ? res.json() : { submissions: [] }))
-      .then((data: { submissions: Array<{ question_index: number; question_text: string; video_url: string; video_score: number | null }> }) => {
-        if (!cancelled) setVideoSubmissions(data.submissions ?? []);
-      })
+      .then(
+        (data: {
+          submissions: Array<{
+            question_index: number;
+            question_text: string;
+            video_url: string;
+            video_score: number | null;
+            confidence_score?: number | null;
+            clarity?: number | null;
+            answer_relevance?: number | null;
+            speech_analysis?: string | null;
+          }>;
+        }) => {
+          if (!cancelled) setVideoSubmissions(data.submissions ?? []);
+        },
+      )
       .catch(() => {
         if (!cancelled) setVideoSubmissions([]);
       });
@@ -149,6 +173,7 @@ export function CandidateReview({
 
   const safeVideoIndex = Math.min(currentVideoIndex, Math.max(0, videoSlides.length - 1));
   const currentSlide = videoSlides[safeVideoIndex] ?? videoSlides[0];
+  const currentSubmission = currentSlide?.submission ?? null;
   const hasMultipleSlides = videoSlides.length > 1;
 
   useEffect(() => {
@@ -366,8 +391,8 @@ export function CandidateReview({
             <div className="pt-3 border-t border-gray-200">
               <span className="text-gray-600 text-sm">Video Score (this question): </span>
               <span className="font-semibold text-gray-900 text-lg">
-                {currentSlide?.submission?.video_score != null
-                  ? `${currentSlide.submission.video_score}%`
+                {currentSubmission?.video_score != null
+                  ? `${currentSubmission.video_score}%`
                   : reviewData?.video_score != null
                     ? `${reviewData.video_score}%`
                     : '—'}
@@ -380,19 +405,37 @@ export function CandidateReview({
                 <div className="bg-purple-50 rounded-lg p-3 border border-purple-100">
                   <div className="text-xs text-purple-600 font-medium mb-1">Confidence</div>
                   <div className="text-lg font-bold text-purple-900">
-                    {reviewLoading ? '…' : reviewData?.confidence_score != null ? `${reviewData.confidence_score}%` : '—'}
+                    {reviewLoading
+                      ? '…'
+                      : currentSubmission?.confidence_score != null
+                        ? `${currentSubmission.confidence_score}%`
+                        : reviewData?.confidence_score != null
+                          ? `${reviewData.confidence_score}%`
+                          : '—'}
                   </div>
                 </div>
                 <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
                   <div className="text-xs text-blue-600 font-medium mb-1">Clarity</div>
                   <div className="text-lg font-bold text-blue-900">
-                    {reviewLoading ? '…' : reviewData?.clarity != null ? `${reviewData.clarity}%` : '—'}
+                    {reviewLoading
+                      ? '…'
+                      : currentSubmission?.clarity != null
+                        ? `${currentSubmission.clarity}%`
+                        : reviewData?.clarity != null
+                          ? `${reviewData.clarity}%`
+                          : '—'}
                   </div>
                 </div>
                 <div className="bg-indigo-50 rounded-lg p-3 border border-indigo-100">
                   <div className="text-xs text-indigo-600 font-medium mb-1">Answer Relevance</div>
                   <div className="text-lg font-bold text-indigo-900">
-                    {reviewLoading ? '…' : reviewData?.answer_relevance != null ? `${reviewData.answer_relevance}%` : '—'}
+                    {reviewLoading
+                      ? '…'
+                      : currentSubmission?.answer_relevance != null
+                        ? `${currentSubmission.answer_relevance}%`
+                        : reviewData?.answer_relevance != null
+                          ? `${reviewData.answer_relevance}%`
+                          : '—'}
                   </div>
                 </div>
               </div>
@@ -401,7 +444,11 @@ export function CandidateReview({
             <div className="pt-4 border-t border-gray-200">
               <h4 className="text-sm font-semibold text-gray-900 mb-2">Speech Analysis Insights</h4>
               <p className="text-sm text-gray-600 leading-relaxed">
-                {reviewLoading ? '…' : reviewData?.speech_analysis ?? 'No speech analysis available.'}
+                {reviewLoading
+                  ? '…'
+                  : currentSubmission?.speech_analysis ??
+                    reviewData?.speech_analysis ??
+                    'No speech analysis available.'}
               </p>
             </div>
           </div>

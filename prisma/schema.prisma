@@ -247,6 +247,12 @@ model video_submissions {
   mime_type       String?
   created_at      DateTime @default(now())
   audio_transcript String?
+  // Per-question AI scoring and speech analysis (for each video answer)
+  video_score        Int?
+  confidence_score   Int?
+  clarity            Int?
+  answer_relevance   Int?
+  speech_analysis    String?
   // Computer vision / engagement metrics
   face_presence_ratio     Float?
   camera_engagement_Ratio Float?

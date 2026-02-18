@@ -397,6 +397,20 @@ async def _analyze_video_and_update_db(
 
     metrics = extract_video_metrics(analysis_raw)
 
+    # Compute per-question video_score from the three speech metrics (ignore missing values)
+    speech_scores = [
+        s
+        for s in (
+            metrics.get("visual_confidence_score"),
+            metrics.get("clarity"),
+            metrics.get("relevance"),
+        )
+        if s is not None
+    ]
+    per_question_video_score = None
+    if speech_scores:
+        per_question_video_score = int(round(sum(speech_scores) / len(speech_scores)))
+
     # Update per-question metrics in video_submissions
     try:
         await video_repo.update_video_analysis_fields(
@@ -407,6 +421,11 @@ async def _analyze_video_and_update_db(
             face_presence_ratio=metrics.get("face_presence_ratio"),
             camera_engagement_Ratio=metrics.get("camera_engagement_Ratio"),
             yaw_variance=metrics.get("yaw_variance"),
+            confidence_score=metrics.get("visual_confidence_score"),
+            clarity=metrics.get("clarity"),
+            answer_relevance=metrics.get("relevance"),
+            speech_analysis=metrics.get("summary"),
+            video_score=per_question_video_score,
         )
     except Exception as e:
         print(

@@ -146,6 +146,7 @@ async def upsert_cv_jd_assessment(
 ) -> None:
     """
     Update ai_assessments with CV+JD model output. Inserts a row if none exists.
+    Also recomputes total_score as the average of available cv_score and video_score.
     """
     # Serialize dict to JSON string for jsonb column (avoids driver/serialization issues)
     cv_jd_output_json = json.dumps(cv_jd_output) if cv_jd_output is not None else None
@@ -159,6 +160,19 @@ async def upsert_cv_jd_assessment(
                 "INSERT INTO ai_assessments (application_id) VALUES ($1);",
                 application_id,
             )
+
+        # Fetch existing video_score so we can compute total_score
+        row = await conn.fetchrow(
+            "SELECT video_score FROM ai_assessments WHERE application_id = $1;",
+            application_id,
+        )
+        existing_video_score = row["video_score"] if row else None
+
+        score_values = [s for s in (cv_score, existing_video_score) if s is not None]
+        total_score = None
+        if score_values:
+            total_score = int(round(sum(score_values) / len(score_values)))
+
         await conn.execute(
             """
             UPDATE ai_assessments SET
@@ -166,7 +180,8 @@ async def upsert_cv_jd_assessment(
                 cv_recommendation = $3,
                 cv_matching_analysis = $4,
                 cv_reason_summary = $5,
-                cv_jd_output = $6::jsonb
+                cv_jd_output = $6::jsonb,
+                total_score = $7
             WHERE application_id = $1;
             """,
             application_id,
@@ -175,6 +190,7 @@ async def upsert_cv_jd_assessment(
             cv_matching_analysis,
             cv_reason_summary,
             cv_jd_output_json,
+            total_score,
         )
 
 
@@ -189,8 +205,19 @@ async def upsert_speech_assessment_and_tag(
     speech_llm_output: dict | None,
     tag_needs_review: bool,
 ) -> None:
-    """Update ai_assessments with speech / video interview LLM outputs and tag candidate_applications if needed."""
+    """Update ai_assessments with speech / video interview LLM outputs and tag candidate_applications if needed.
+
+    - video_score is computed as the average of confidence_score, clarity and answer_relevance (ignoring None).
+    - total_score is computed as the average of available cv_score and video_score.
+    """
     speech_llm_output_json = json.dumps(speech_llm_output) if speech_llm_output is not None else None
+
+    # Compute video_score from the provided speech metrics
+    speech_scores = [s for s in (confidence_score, clarity, answer_relevance) if s is not None]
+    video_score = None
+    if speech_scores:
+        video_score = int(round(sum(speech_scores) / len(speech_scores)))
+
     async with pool.acquire() as conn:
         existing = await conn.fetchval(
             "SELECT assessment_id FROM ai_assessments WHERE application_id = $1;",
@@ -201,6 +228,21 @@ async def upsert_speech_assessment_and_tag(
                 "INSERT INTO ai_assessments (application_id) VALUES ($1);",
                 application_id,
             )
+
+        # Fetch existing cv_score so we can compute total_score
+        row = await conn.fetchrow(
+            "SELECT cv_score, video_score FROM ai_assessments WHERE application_id = $1;",
+            application_id,
+        )
+        existing_cv_score = row["cv_score"] if row else None
+        # Prefer freshly computed video_score if available, otherwise fall back to stored value
+        effective_video_score = video_score if video_score is not None else (row["video_score"] if row else None)
+
+        score_values = [s for s in (existing_cv_score, effective_video_score) if s is not None]
+        total_score = None
+        if score_values:
+            total_score = int(round(sum(score_values) / len(score_values)))
+
         await conn.execute(
             """
             UPDATE ai_assessments SET
@@ -208,7 +250,9 @@ async def upsert_speech_assessment_and_tag(
                 clarity = $3,
                 answer_relevance = $4,
                 speech_analysis = $5,
-                speech_llm_output = $6::jsonb
+                speech_llm_output = $6::jsonb,
+                video_score = $7,
+                total_score = $8
             WHERE application_id = $1;
             """,
             application_id,
@@ -217,6 +261,8 @@ async def upsert_speech_assessment_and_tag(
             answer_relevance,
             speech_analysis,
             speech_llm_output_json,
+            video_score,
+            total_score,
         )
         await conn.execute(
             """

@@ -62,7 +62,11 @@ async def upsert_video_metadata(
 
 
 async def list_by_application(pool: asyncpg.Pool, application_id: int) -> list[dict]:
-    """List all video submissions for an application, ordered by question_index (for Candidate Review)."""
+    """
+    List all video submissions for an application, ordered by question_index (for Candidate Review).
+
+    Returns per-question video metadata plus the per-question AI metrics stored on video_submissions.
+    """
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
@@ -73,7 +77,12 @@ async def list_by_application(pool: asyncpg.Pool, application_id: int) -> list[d
                 audio_transcript,
                 face_presence_ratio,
                 "camera_engagement_Ratio",
-                yaw_variance
+                yaw_variance,
+                video_score,
+                confidence_score,
+                clarity,
+                answer_relevance,
+                speech_analysis
             FROM video_submissions
             WHERE application_id = $1
             ORDER BY question_index;
@@ -92,6 +101,11 @@ async def update_video_analysis_fields(
     face_presence_ratio: float | None,
     camera_engagement_Ratio: float | None,
     yaw_variance: float | None,
+    confidence_score: int | None,
+    clarity: int | None,
+    answer_relevance: int | None,
+    speech_analysis: str | None,
+    video_score: int | None,
 ) -> None:
     """Update per-question analysis fields (transcript + engagement metrics) for a video submission."""
     async with pool.acquire() as conn:
@@ -102,7 +116,12 @@ async def update_video_analysis_fields(
                 audio_transcript = $3,
                 face_presence_ratio = $4,
                 "camera_engagement_Ratio" = $5,
-                yaw_variance = $6
+                yaw_variance = $6,
+                confidence_score = $7,
+                clarity = $8,
+                answer_relevance = $9,
+                speech_analysis = $10,
+                video_score = $11
             WHERE application_id = $1
               AND question_index = $2;
             """,
@@ -112,6 +131,11 @@ async def update_video_analysis_fields(
             face_presence_ratio,
             camera_engagement_Ratio,
             yaw_variance,
+            confidence_score,
+            clarity,
+            answer_relevance,
+            speech_analysis,
+            video_score,
         )
 
 
