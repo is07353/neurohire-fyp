@@ -11,11 +11,6 @@ interface ReviewData {
   cv_score: number | null;
   cv_matching_analysis: string | null;
   cv_reason_summary: string | null;
-  video_score: number | null;
-  confidence_score: number | null;
-  clarity: number | null;
-  answer_relevance: number | null;
-  speech_analysis: string | null;
 }
 
 interface CandidateReviewProps {
@@ -144,7 +139,7 @@ export function CandidateReview({
   }, [applicant.id]);
 
   const cvScore = reviewData?.cv_score ?? applicant.cvScore ?? 0;
-  const videoScore = reviewData?.video_score ?? applicant.videoScore ?? 0;
+  const videoScore = applicant.videoScore ?? 0;
   const aiRecommendation = cvScore >= 85 && videoScore >= 85 ? 'accept' : 'interview';
 
   const getInitials = (name: string) => {
@@ -393,8 +388,8 @@ export function CandidateReview({
               <span className="font-semibold text-gray-900 text-lg">
                 {currentSubmission?.video_score != null
                   ? `${currentSubmission.video_score}%`
-                  : reviewData?.video_score != null
-                    ? `${reviewData.video_score}%`
+                  : videoScore
+                    ? `${videoScore}%`
                     : '—'}
               </span>
             </div>
@@ -409,9 +404,7 @@ export function CandidateReview({
                       ? '…'
                       : currentSubmission?.confidence_score != null
                         ? `${currentSubmission.confidence_score}%`
-                        : reviewData?.confidence_score != null
-                          ? `${reviewData.confidence_score}%`
-                          : '—'}
+                        : '—'}
                   </div>
                 </div>
                 <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
@@ -421,9 +414,7 @@ export function CandidateReview({
                       ? '…'
                       : currentSubmission?.clarity != null
                         ? `${currentSubmission.clarity}%`
-                        : reviewData?.clarity != null
-                          ? `${reviewData.clarity}%`
-                          : '—'}
+                        : '—'}
                   </div>
                 </div>
                 <div className="bg-indigo-50 rounded-lg p-3 border border-indigo-100">
@@ -433,9 +424,7 @@ export function CandidateReview({
                       ? '…'
                       : currentSubmission?.answer_relevance != null
                         ? `${currentSubmission.answer_relevance}%`
-                        : reviewData?.answer_relevance != null
-                          ? `${reviewData.answer_relevance}%`
-                          : '—'}
+                        : '—'}
                   </div>
                 </div>
               </div>
@@ -446,9 +435,7 @@ export function CandidateReview({
               <p className="text-sm text-gray-600 leading-relaxed">
                 {reviewLoading
                   ? '…'
-                  : currentSubmission?.speech_analysis ??
-                    reviewData?.speech_analysis ??
-                    'No speech analysis available.'}
+                  : currentSubmission?.speech_analysis ?? 'No speech analysis available.'}
               </p>
             </div>
           </div>

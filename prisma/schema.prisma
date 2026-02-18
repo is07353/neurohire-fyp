@@ -59,19 +59,6 @@ model ai_assessments {
   // Full raw JSON output from the CV–JD model
   cv_jd_output            Json?
 
-  // Video analysis score (application-level; per-question scores remain in video_submissions)
-  video_score             Int?
-
-  // Average of cv_score and video_score (weighted by job weightage can be applied in app)
-  total_score             Int?
-
-  // Speech / video interview LLM outputs (application-level aggregates or summary)
-  confidence_score        Int?
-  clarity                 Int?
-  answer_relevance        Int?
-  speech_analysis        String?
-  speech_llm_output      Json?
-
   candidate_applications  candidate_applications @relation(fields: [application_id], references: [application_id], onDelete: Cascade)
 
   @@index([application_id])
@@ -82,7 +69,6 @@ model candidate_applications {
   candidate_id        Int
   job_id              Int
   status              String               @default("pending")
-  tag_needs_review    Boolean              @default(false)
   created_at          DateTime             @default(now())
   ai_assessments      ai_assessments?
   candidates          candidates           @relation(fields: [candidate_id], references: [candidate_id], onDelete: Cascade)
@@ -253,6 +239,9 @@ model video_submissions {
   clarity            Int?
   answer_relevance   Int?
   speech_analysis    String?
+  // Full raw JSON output from the video pipeline (per-question)
+  speech_llm_output  Json?
+  tag_needs_review   Boolean              @default(false)
   // Computer vision / engagement metrics
   face_presence_ratio     Float?
   camera_engagement_Ratio Float?

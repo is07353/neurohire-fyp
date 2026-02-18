@@ -365,8 +365,7 @@ async def _analyze_video_and_update_db(
     Background task:
     - download video file
     - call Gradio video pipeline
-    - update ai_assessments, candidate_applications.tag_needs_review,
-      and per-question metrics in video_submissions.
+    - update per-question metrics in video_submissions and application-level ai_assessments.
     """
     pool = app.state.db_pool
     try:
@@ -411,7 +410,7 @@ async def _analyze_video_and_update_db(
     if speech_scores:
         per_question_video_score = int(round(sum(speech_scores) / len(speech_scores)))
 
-    # Update per-question metrics in video_submissions
+    # Update per-question metrics in video_submissions (including needs_review and full pipeline JSON)
     try:
         await video_repo.update_video_analysis_fields(
             pool,
@@ -426,6 +425,8 @@ async def _analyze_video_and_update_db(
             answer_relevance=metrics.get("relevance"),
             speech_analysis=metrics.get("summary"),
             video_score=per_question_video_score,
+            tag_needs_review=metrics.get("needs_review", False),
+            speech_llm_output=analysis_raw,
         )
     except Exception as e:
         print(

@@ -278,7 +278,7 @@ async def list_job_applicants(
   job_id: int,
   pool: asyncpg.Pool = Depends(get_db_pool),
 ):
-  """List applicants for a job with cv_score, video_score, total_score from ai_assessments."""
+  """List applicants for a job with cv_score from ai_assessments."""
   # Verify job exists
   job = await job_repo.get_job_by_id(pool, job_id=job_id)
   if not job:
@@ -303,15 +303,10 @@ async def list_job_applicants(
 
 
 class ApplicationReviewResponse(BaseModel):
-  """Full ai_assessments data for Candidate Review page (frontend -> DBMS mapping)."""
+  """CV-related ai_assessments data for Candidate Review page (frontend -> DBMS mapping)."""
   cv_score: int | None
   cv_matching_analysis: str | None
   cv_reason_summary: str | None
-  video_score: int | None
-  confidence_score: int | None
-  clarity: int | None
-  answer_relevance: int | None
-  speech_analysis: str | None
 
 
 @router.get("/applications/{application_id}/review", response_model=ApplicationReviewResponse | None)
@@ -327,11 +322,6 @@ async def get_application_review(
     cv_score=row.get("cv_score"),
     cv_matching_analysis=row.get("cv_matching_analysis"),
     cv_reason_summary=row.get("cv_reason_summary"),
-    video_score=row.get("video_score"),
-    confidence_score=row.get("confidence_score"),
-    clarity=row.get("clarity"),
-    answer_relevance=row.get("answer_relevance"),
-    speech_analysis=row.get("speech_analysis"),
   )
 
 

@@ -15,7 +15,7 @@ async def create_candidate_application(
             """
             INSERT INTO candidate_applications (candidate_id, job_id)
             VALUES ($1, $2)
-            RETURNING application_id, candidate_id, job_id, status, tag_needs_review, created_at;
+            RETURNING application_id, candidate_id, job_id, status, created_at;
             """,
             candidate_id,
             job_id,
@@ -32,7 +32,7 @@ async def get_application_by_id(
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """
-            SELECT application_id, candidate_id, job_id, status, tag_needs_review, created_at
+            SELECT application_id, candidate_id, job_id, status, created_at
             FROM candidate_applications
             WHERE application_id = $1;
             """,
@@ -45,7 +45,7 @@ async def list_applications_for_job(
     pool: asyncpg.Pool,
     job_id: int,
 ) -> list[dict]:
-    """List all applications for a job with candidate name and ai_assessments (cv_score, video_score, total_score)."""
+    """List all applications for a job with candidate name and ai_assessments (cv_score only)."""
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
@@ -58,9 +58,7 @@ async def list_applications_for_job(
                 c.email AS candidate_email,
                 c.phone AS candidate_phone,
                 c.address AS candidate_address,
-                aa.cv_score,
-                aa.video_score,
-                aa.total_score
+                aa.cv_score
             FROM candidate_applications ca
             LEFT JOIN candidates c ON c.candidate_id = ca.candidate_id
             LEFT JOIN ai_assessments aa ON aa.application_id = ca.application_id
@@ -80,8 +78,8 @@ async def list_applications_for_job(
             "candidate_phone": r.get("candidate_phone"),
             "candidate_address": r.get("candidate_address"),
             "cv_score": r["cv_score"],
-            "video_score": r["video_score"],
-            "total_score": r["total_score"],
+            "video_score": None,
+            "total_score": None,
         }
         for r in rows
     ]
@@ -102,14 +100,7 @@ async def get_ai_assessment_for_application(
                 cv_recommendation,
                 cv_matching_analysis,
                 cv_reason_summary,
-                cv_jd_output,
-                video_score,
-                total_score,
-                confidence_score,
-                clarity,
-                answer_relevance,
-                speech_analysis,
-                speech_llm_output
+                cv_jd_output
             FROM ai_assessments
             WHERE application_id = $1;
             """,
@@ -144,10 +135,7 @@ async def upsert_cv_jd_assessment(
     cv_reason_summary: str | None = None,
     cv_jd_output: dict | None = None,
 ) -> None:
-    """
-    Update ai_assessments with CV+JD model output. Inserts a row if none exists.
-    Also recomputes total_score as the average of available cv_score and video_score.
-    """
+    """Update ai_assessments with CV+JD model output. Inserts a row if none exists."""
     # Serialize dict to JSON string for jsonb column (avoids driver/serialization issues)
     cv_jd_output_json = json.dumps(cv_jd_output) if cv_jd_output is not None else None
     async with pool.acquire() as conn:
@@ -161,18 +149,6 @@ async def upsert_cv_jd_assessment(
                 application_id,
             )
 
-        # Fetch existing video_score so we can compute total_score
-        row = await conn.fetchrow(
-            "SELECT video_score FROM ai_assessments WHERE application_id = $1;",
-            application_id,
-        )
-        existing_video_score = row["video_score"] if row else None
-
-        score_values = [s for s in (cv_score, existing_video_score) if s is not None]
-        total_score = None
-        if score_values:
-            total_score = int(round(sum(score_values) / len(score_values)))
-
         await conn.execute(
             """
             UPDATE ai_assessments SET
@@ -180,8 +156,7 @@ async def upsert_cv_jd_assessment(
                 cv_recommendation = $3,
                 cv_matching_analysis = $4,
                 cv_reason_summary = $5,
-                cv_jd_output = $6::jsonb,
-                total_score = $7
+                cv_jd_output = $6::jsonb
             WHERE application_id = $1;
             """,
             application_id,
@@ -190,7 +165,6 @@ async def upsert_cv_jd_assessment(
             cv_matching_analysis,
             cv_reason_summary,
             cv_jd_output_json,
-            total_score,
         )
 
 
@@ -205,19 +179,11 @@ async def upsert_speech_assessment_and_tag(
     speech_llm_output: dict | None,
     tag_needs_review: bool,
 ) -> None:
-    """Update ai_assessments with speech / video interview LLM outputs and tag candidate_applications if needed.
-
-    - video_score is computed as the average of confidence_score, clarity and answer_relevance (ignoring None).
-    - total_score is computed as the average of available cv_score and video_score.
     """
-    speech_llm_output_json = json.dumps(speech_llm_output) if speech_llm_output is not None else None
-
-    # Compute video_score from the provided speech metrics
-    speech_scores = [s for s in (confidence_score, clarity, answer_relevance) if s is not None]
-    video_score = None
-    if speech_scores:
-        video_score = int(round(sum(speech_scores) / len(speech_scores)))
-
+    Legacy hook: previously updated ai_assessments speech fields and tag_needs_review.
+    Speech/video metrics are now stored per-question in video_submissions and tag_needs_review has been removed.
+    This function is kept as a no-op for backward compatibility with existing call sites.
+    """
     async with pool.acquire() as conn:
         existing = await conn.fetchval(
             "SELECT assessment_id FROM ai_assessments WHERE application_id = $1;",
@@ -228,51 +194,6 @@ async def upsert_speech_assessment_and_tag(
                 "INSERT INTO ai_assessments (application_id) VALUES ($1);",
                 application_id,
             )
-
-        # Fetch existing cv_score so we can compute total_score
-        row = await conn.fetchrow(
-            "SELECT cv_score, video_score FROM ai_assessments WHERE application_id = $1;",
-            application_id,
-        )
-        existing_cv_score = row["cv_score"] if row else None
-        # Prefer freshly computed video_score if available, otherwise fall back to stored value
-        effective_video_score = video_score if video_score is not None else (row["video_score"] if row else None)
-
-        score_values = [s for s in (existing_cv_score, effective_video_score) if s is not None]
-        total_score = None
-        if score_values:
-            total_score = int(round(sum(score_values) / len(score_values)))
-
-        await conn.execute(
-            """
-            UPDATE ai_assessments SET
-                confidence_score = $2,
-                clarity = $3,
-                answer_relevance = $4,
-                speech_analysis = $5,
-                speech_llm_output = $6::jsonb,
-                video_score = $7,
-                total_score = $8
-            WHERE application_id = $1;
-            """,
-            application_id,
-            confidence_score,
-            clarity,
-            answer_relevance,
-            speech_analysis,
-            speech_llm_output_json,
-            video_score,
-            total_score,
-        )
-        await conn.execute(
-            """
-            UPDATE candidate_applications
-            SET tag_needs_review = $2
-            WHERE application_id = $1;
-            """,
-            application_id,
-            tag_needs_review,
-        )
 
 
 async def upsert_dummy_ai_assessment(
@@ -309,25 +230,13 @@ async def upsert_dummy_ai_assessment(
                 UPDATE ai_assessments SET
                     cv_score = $2,
                     cv_matching_analysis = $3,
-                    cv_reason_summary = $4,
-                    video_score = $5,
-                    total_score = $6,
-                    confidence_score = $7,
-                    clarity = $8,
-                    answer_relevance = $9,
-                    speech_analysis = $10
+                    cv_reason_summary = $4
                 WHERE application_id = $1;
                 """,
                 application_id,
                 76,
                 dummy_cv_matching,
                 dummy_reason_summary,
-                82,
-                79,
-                85,
-                78,
-                88,
-                dummy_speech_analysis,
             )
         else:
             await conn.execute(
@@ -336,25 +245,13 @@ async def upsert_dummy_ai_assessment(
                     application_id,
                     cv_score,
                     cv_matching_analysis,
-                    cv_reason_summary,
-                    video_score,
-                    total_score,
-                    confidence_score,
-                    clarity,
-                    answer_relevance,
-                    speech_analysis
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);
+                    cv_reason_summary
+                ) VALUES ($1, $2, $3, $4);
                 """,
                 application_id,
                 76,
                 dummy_cv_matching,
                 dummy_reason_summary,
-                82,
-                79,
-                85,
-                78,
-                88,
-                dummy_speech_analysis,
             )
     return True
 
@@ -460,16 +357,16 @@ async def count_applications_by_job(pool: asyncpg.Pool, job_ids: list[int]) -> d
 async def get_recruiter_analytics(pool: asyncpg.Pool, recruiter_id: int) -> dict:
     """Analytics for recruiter overview: total applicants, AI buckets, shortlisted, monthly applications."""
     async with pool.acquire() as conn:
-        # Total applicants and buckets by total_score (from ai_assessments)
+        # Total applicants and buckets by cv_score (from ai_assessments)
         row = await conn.fetchrow(
             """
             SELECT
                 COUNT(*) AS total_applicants,
                 COUNT(*) FILTER (WHERE ca.status IN ('accepted', 'sent_to_interview')) AS shortlisted,
-                COUNT(*) FILTER (WHERE COALESCE(aa.total_score, -1) >= 85) AS strong_fit,
-                COUNT(*) FILTER (WHERE COALESCE(aa.total_score, -1) >= 75 AND COALESCE(aa.total_score, -1) < 85) AS good_fit,
-                COUNT(*) FILTER (WHERE COALESCE(aa.total_score, -1) >= 65 AND COALESCE(aa.total_score, -1) < 75) AS needs_review,
-                COUNT(*) FILTER (WHERE COALESCE(aa.total_score, -1) < 65 OR aa.total_score IS NULL) AS low_fit
+                COUNT(*) FILTER (WHERE COALESCE(aa.cv_score, -1) >= 85) AS strong_fit,
+                COUNT(*) FILTER (WHERE COALESCE(aa.cv_score, -1) >= 75 AND COALESCE(aa.cv_score, -1) < 85) AS good_fit,
+                COUNT(*) FILTER (WHERE COALESCE(aa.cv_score, -1) >= 65 AND COALESCE(aa.cv_score, -1) < 75) AS needs_review,
+                COUNT(*) FILTER (WHERE COALESCE(aa.cv_score, -1) < 65 OR aa.cv_score IS NULL) AS low_fit
             FROM candidate_applications ca
             INNER JOIN jobs j ON j.job_id = ca.job_id
             LEFT JOIN ai_assessments aa ON aa.application_id = ca.application_id

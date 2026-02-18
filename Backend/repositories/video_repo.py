@@ -1,4 +1,5 @@
 """DB operations for video interview submissions (video_submissions table)."""
+import json
 import asyncpg
 
 
@@ -82,7 +83,9 @@ async def list_by_application(pool: asyncpg.Pool, application_id: int) -> list[d
                 confidence_score,
                 clarity,
                 answer_relevance,
-                speech_analysis
+                speech_analysis,
+                speech_llm_output,
+                tag_needs_review
             FROM video_submissions
             WHERE application_id = $1
             ORDER BY question_index;
@@ -106,8 +109,11 @@ async def update_video_analysis_fields(
     answer_relevance: int | None,
     speech_analysis: str | None,
     video_score: int | None,
+    tag_needs_review: bool = False,
+    speech_llm_output: dict | None = None,
 ) -> None:
-    """Update per-question analysis fields (transcript + engagement metrics) for a video submission."""
+    """Update per-question analysis fields (transcript, metrics, needs_review, full pipeline JSON) for a video submission."""
+    speech_llm_output_json = json.dumps(speech_llm_output) if speech_llm_output is not None else None
     async with pool.acquire() as conn:
         await conn.execute(
             """
@@ -121,7 +127,9 @@ async def update_video_analysis_fields(
                 clarity = $8,
                 answer_relevance = $9,
                 speech_analysis = $10,
-                video_score = $11
+                video_score = $11,
+                tag_needs_review = $12,
+                speech_llm_output = $13::jsonb
             WHERE application_id = $1
               AND question_index = $2;
             """,
@@ -136,6 +144,8 @@ async def update_video_analysis_fields(
             answer_relevance,
             speech_analysis,
             video_score,
+            tag_needs_review,
+            speech_llm_output_json,
         )
 
 
