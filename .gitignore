@@ -15,4 +15,8 @@ __pycache__/
 # Logs
 *.log
 
+# Backend: downloaded videos and CVs (can be large)
+Backend/videos_application/
+Backend/cv_pdfs/
+
 /src/generated/prisma
