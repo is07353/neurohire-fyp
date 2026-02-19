@@ -271,6 +271,8 @@ class JobApplicantResponse(BaseModel):
   cv_score: int | None
   video_score: int | None
   total_score: int | None
+  analysis_progress: int  # 0–100, video analysis progress
+  analysis_complete: bool  # true when progress >= 100, recruiter can view report
 
 
 @router.get("/jobs/{job_id}/applicants", response_model=list[JobApplicantResponse])
@@ -297,6 +299,8 @@ async def list_job_applicants(
       cv_score=r["cv_score"],
       video_score=r["video_score"],
       total_score=r["total_score"],
+      analysis_progress=r["analysis_progress"],
+      analysis_complete=r["analysis_complete"],
     )
     for r in rows
   ]

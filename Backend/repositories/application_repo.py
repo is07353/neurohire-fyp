@@ -45,8 +45,15 @@ async def list_applications_for_job(
     pool: asyncpg.Pool,
     job_id: int,
 ) -> list[dict]:
-    """List all applications for a job with candidate name and ai_assessments (cv_score only)."""
+    """List all applications for a job with candidate name, ai_assessments (cv_score), and video analysis progress."""
     async with pool.acquire() as conn:
+        # Total video questions for this job (for progress denominator)
+        total_questions_row = await conn.fetchrow(
+            "SELECT COUNT(*) AS cnt FROM job_questions WHERE job_id = $1;",
+            job_id,
+        )
+        total_questions = total_questions_row["cnt"] or 0
+
         rows = await conn.fetch(
             """
             SELECT
@@ -58,7 +65,9 @@ async def list_applications_for_job(
                 c.email AS candidate_email,
                 c.phone AS candidate_phone,
                 c.address AS candidate_address,
-                aa.cv_score
+                aa.cv_score,
+                (SELECT COUNT(*) FROM video_submissions vs
+                 WHERE vs.application_id = ca.application_id AND vs.video_score IS NOT NULL) AS analyzed_count
             FROM candidate_applications ca
             LEFT JOIN candidates c ON c.candidate_id = ca.candidate_id
             LEFT JOIN ai_assessments aa ON aa.application_id = ca.application_id
@@ -67,6 +76,13 @@ async def list_applications_for_job(
             """,
             job_id,
         )
+
+    def _progress(analyzed: int) -> tuple[int, bool]:
+        if total_questions == 0:
+            return 100, True  # No video questions => consider complete
+        pct = min(100, round(analyzed / total_questions * 100))
+        return pct, pct >= 100
+
     return [
         {
             "application_id": r["application_id"],
@@ -80,6 +96,8 @@ async def list_applications_for_job(
             "cv_score": r["cv_score"],
             "video_score": None,
             "total_score": None,
+            "analysis_progress": (p := _progress(r.get("analyzed_count") or 0))[0],
+            "analysis_complete": p[1],
         }
         for r in rows
     ]

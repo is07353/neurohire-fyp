@@ -18,7 +18,7 @@ from typing import Any, Dict
 import requests
 
 # FastAPI + Cloudflare tunnel (override with env or pass api_url if needed)
-VIDEO_ANALYSIS_BASE_URL = "https://coins-collectors-independent-singer.trycloudflare.com"
+VIDEO_ANALYSIS_BASE_URL = "https://tiger-linear-factor-climate.trycloudflare.com"
 VIDEO_ANALYSIS_ENDPOINT = "/analyze"
 # Timeout in seconds (video pipeline is heavy; allow up to 10 min)
 VIDEO_REQUEST_TIMEOUT = 600

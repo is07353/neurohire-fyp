@@ -143,8 +143,40 @@ async def _download_and_analyze_cv(
         matching = analysis.get("matching_analysis") or []
         parsed_keywords = json.dumps(matching) if isinstance(matching, list) else str(matching)
         technical_score = analysis.get("Total_score")
+        # Build human-readable bullet lines for recruiter UI instead of raw JSON/dict repr
+        lines: list[str] = []
+        for item in matching:
+            if isinstance(item, dict):
+                point = str(item.get("point") or item.get("aspect") or item.get("category") or "Point").strip()
+                details = str(
+                    item.get("details")
+                    or item.get("detail")
+                    or item.get("reason")
+                    or ""
+                ).strip()
+                # Normalise stray punctuation the model sometimes adds, like leading ':' or 'role.: However'
+                if details:
+                    details = details.lstrip(":").lstrip("-").strip()
+                    details = details.replace(". :", ". ").replace(".:", ".")
+                score_val = item.get("score") or item.get("Score") or item.get("total_score")
+                if score_val is not None:
+                    try:
+                        score_int = int(score_val)
+                        line = f"{point}: {details} (score: {score_int})" if details else f"{point} (score: {score_int})"
+                    except (TypeError, ValueError):
+                        line = f"{point}: {details}" if details else point
+                else:
+                    line = f"{point}: {details}" if details else point
+                lines.append(line)
+            elif isinstance(item, str):
+                text = item.strip()
+                if text:
+                    lines.append(text)
+            else:
+                lines.append(str(item))
+
         # Build payload for ai_assessments so we can persist even if a later step fails
-        cv_matching_str = "\n".join(str(x) for x in matching) if matching else None
+        cv_matching_str = "\n".join(lines) if lines else None
         assessment_payload = {
             "cv_score": technical_score,
             "cv_recommendation": (analysis.get("recommendation") or "").strip() or None,
