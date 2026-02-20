@@ -165,6 +165,9 @@ export function ViewApplicants({
                     <th className="px-6 py-4 text-left text-sm font-medium text-gray-700">Email</th>
                     <th className="px-6 py-4 text-left text-sm font-medium text-gray-700">Phone Number</th>
                     <th className="px-6 py-4 text-left text-sm font-medium text-gray-700">Location</th>
+                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-700">CV Score</th>
+                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-700">Video Score</th>
+                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-700">Total Score</th>
                     <th className="px-6 py-4 text-left text-sm font-medium text-gray-700">Analysis progress</th>
                     <th className="px-6 py-4 text-left text-sm font-medium text-gray-700">Action</th>
                   </tr>
@@ -191,6 +194,21 @@ export function ViewApplicants({
                         </td>
                         <td className="px-6 py-4">
                           <span className="text-sm text-gray-900">{applicant.candidate_address ?? '—'}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-sm font-semibold text-gray-900">
+                            {applicant.cv_score != null ? `${applicant.cv_score}%` : '—'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-sm font-semibold text-gray-900">
+                            {applicant.video_score != null ? `${applicant.video_score}%` : '—'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-sm font-bold text-[#FF13F0]">
+                            {applicant.total_score != null ? `${applicant.total_score}%` : '—'}
+                          </span>
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex flex-col gap-1 min-w-[120px]">

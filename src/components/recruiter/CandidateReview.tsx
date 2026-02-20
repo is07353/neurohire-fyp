@@ -140,7 +140,17 @@ export function CandidateReview({
 
   const cvScore = reviewData?.cv_score ?? applicant.cvScore ?? 0;
   const videoScore = applicant.videoScore ?? 0;
-  const aiRecommendation = cvScore >= 85 && videoScore >= 85 ? 'accept' : 'interview';
+  const totalScore = applicant.totalScore ?? null;
+  
+  // AI recommendation based on total score: 0-33 reject, 34-66 interview, 67-100 accept
+  const aiRecommendation: 'accept' | 'interview' | 'reject' = 
+    totalScore === null 
+      ? 'interview' // Default to interview if score not calculated yet
+      : totalScore >= 67 
+        ? 'accept'
+        : totalScore >= 34 
+          ? 'interview'
+          : 'reject';
 
   const getInitials = (name: string) => {
     return name
@@ -176,7 +186,8 @@ export function CandidateReview({
   }, [applicant.id, job?.id]);
 
   const handleAction = (action: 'accept' | 'interview' | 'reject') => {
-    if (action !== aiRecommendation && aiRecommendation === 'accept') {
+    // Show warning if action differs from AI recommendation
+    if (action !== aiRecommendation) {
       setShowWarning(true);
     }
     setModalType(action);
@@ -262,22 +273,34 @@ export function CandidateReview({
         <div className={`rounded-xl p-6 mb-8 border shadow-sm ${
           aiRecommendation === 'accept'
             ? 'bg-green-50 border-green-200'
+            : aiRecommendation === 'reject'
+            ? 'bg-red-50 border-red-200'
             : 'bg-blue-50 border-blue-200'
         }`}>
           <div className="flex items-start gap-4">
             <div className={`p-2 rounded-lg ${
-              aiRecommendation === 'accept' ? 'bg-green-100' : 'bg-blue-100'
+              aiRecommendation === 'accept' 
+                ? 'bg-green-100' 
+                : aiRecommendation === 'reject'
+                ? 'bg-red-100'
+                : 'bg-blue-100'
             }`}>
               <Brain className={`w-6 h-6 ${
-                aiRecommendation === 'accept' ? 'text-green-600' : 'text-blue-600'
+                aiRecommendation === 'accept' 
+                  ? 'text-green-600' 
+                  : aiRecommendation === 'reject'
+                  ? 'text-red-600'
+                  : 'text-blue-600'
               }`} />
             </div>
             <div>
               <h3 className="text-lg font-semibold text-gray-900 mb-1">AI Recommendation</h3>
               <p className="text-gray-700">
                 {aiRecommendation === 'accept'
-                  ? 'This candidate is recommended for immediate acceptance based on high scores.'
-                  : 'This candidate is recommended for a human interview to assess further.'}
+                  ? `This candidate is recommended for immediate acceptance based on high total score (${totalScore ?? 'N/A'}%).`
+                  : aiRecommendation === 'reject'
+                  ? `This candidate is not recommended based on low total score (${totalScore ?? 'N/A'}%).`
+                  : `This candidate is recommended for a human interview to assess further (total score: ${totalScore ?? 'N/A'}%).`}
               </p>
             </div>
           </div>

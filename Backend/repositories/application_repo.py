@@ -45,8 +45,16 @@ async def list_applications_for_job(
     pool: asyncpg.Pool,
     job_id: int,
 ) -> list[dict]:
-    """List all applications for a job with candidate name, ai_assessments (cv_score), and video analysis progress."""
+    """List all applications for a job with candidate name, ai_assessments (cv_score), video analysis progress, and calculated scores."""
     async with pool.acquire() as conn:
+        # Get job weightages for scoring
+        job_row = await conn.fetchrow(
+            "SELECT cv_score_weightage, video_score_weightage FROM jobs WHERE job_id = $1;",
+            job_id,
+        )
+        cv_weightage = (job_row["cv_score_weightage"] or 50) / 100.0 if job_row else 0.5
+        video_weightage = (job_row["video_score_weightage"] or 50) / 100.0 if job_row else 0.5
+
         # Total video questions for this job (for progress denominator)
         total_questions_row = await conn.fetchrow(
             "SELECT COUNT(*) AS cnt FROM job_questions WHERE job_id = $1;",
@@ -83,9 +91,70 @@ async def list_applications_for_job(
         pct = min(100, round(analyzed / total_questions * 100))
         return pct, pct >= 100
 
-    return [
-        {
-            "application_id": r["application_id"],
+    async def _calculate_scores(application_id: int, cv_score: int | None) -> tuple[int | None, int | None]:
+        """Calculate video_score and total_score for an application.
+        
+        Returns: (video_score, total_score)
+        - video_score: average of all per-question video scores
+        - total_score: cv_score * cv_weightage + video_score * video_weightage
+        """
+        async with pool.acquire() as conn:
+            video_rows = await conn.fetch(
+                """
+                SELECT confidence_score, clarity, answer_relevance, video_score
+                FROM video_submissions
+                WHERE application_id = $1
+                ORDER BY question_index;
+                """,
+                application_id,
+            )
+            video_submissions = [dict(r) for r in video_rows]
+        
+        if not video_submissions:
+            return None, None
+        
+        # Calculate per-question scores and aggregate
+        question_scores = []
+        for vs in video_submissions:
+            # If video_score already exists, use it; otherwise calculate from components
+            if vs.get("video_score") is not None:
+                question_scores.append(vs["video_score"])
+            else:
+                # Calculate from confidence, clarity, relevance
+                components = [
+                    vs.get("confidence_score"),
+                    vs.get("clarity"),
+                    vs.get("answer_relevance"),
+                ]
+                valid_components = [c for c in components if c is not None]
+                if valid_components:
+                    question_scores.append(int(round(sum(valid_components) / len(valid_components))))
+        
+        if not question_scores:
+            return None, None
+        
+        # Total video score = average of all question scores
+        total_video_score = int(round(sum(question_scores) / len(question_scores)))
+        
+        # Total application score = cv_score * cv_weightage + video_score * video_weightage
+        total_score = None
+        if cv_score is not None:
+            total_score = int(round(cv_score * cv_weightage + total_video_score * video_weightage))
+        elif total_video_score is not None:
+            # If no CV score, use only video score
+            total_score = total_video_score
+        
+        return total_video_score, total_score
+
+    # Calculate scores for each application
+    results = []
+    for r in rows:
+        application_id = r["application_id"]
+        cv_score = r["cv_score"]
+        video_score, total_score = await _calculate_scores(application_id, cv_score)
+        
+        results.append({
+            "application_id": application_id,
             "candidate_id": r["candidate_id"],
             "job_id": r["job_id"],
             "status": r["status"],
@@ -93,14 +162,14 @@ async def list_applications_for_job(
             "candidate_email": r.get("candidate_email"),
             "candidate_phone": r.get("candidate_phone"),
             "candidate_address": r.get("candidate_address"),
-            "cv_score": r["cv_score"],
-            "video_score": None,
-            "total_score": None,
+            "cv_score": cv_score,
+            "video_score": video_score,
+            "total_score": total_score,
             "analysis_progress": (p := _progress(r.get("analyzed_count") or 0))[0],
             "analysis_complete": p[1],
-        }
-        for r in rows
-    ]
+        })
+    
+    return results
 
 
 async def get_ai_assessment_for_application(
