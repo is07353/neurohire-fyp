@@ -18,7 +18,7 @@ from typing import Any
 from gradio_client import Client, handle_file
 
 # Default Gradio app URL (can be overridden via env)
-GRADIO_APP_URL = "https://226d07845501f998dc.gradio.live/"
+GRADIO_APP_URL = "https://334096f8f44116bb4e.gradio.live/"
 API_NAME = "/process_cv"
 MAX_RETRIES = 4
 # Timeout in seconds for Gradio HTTP calls (model inference can be slow)

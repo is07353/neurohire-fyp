@@ -27,6 +27,8 @@ type ApplicantRow = {
   cv_score: number | null;
   video_score: number | null;
   total_score: number | null;
+  analysis_progress: number;
+  analysis_complete: boolean;
 };
 
 function toApplicant(row: ApplicantRow, jobId: string): Applicant {
@@ -72,6 +74,23 @@ export function ViewApplicants({
     load();
     return () => { cancelled = true; };
   }, [job.id]);
+
+  // Poll while any applicant is still being analyzed (progress < 100)
+  const anyInProgress = applicants.some((a) => !a.analysis_complete);
+  useEffect(() => {
+    if (!anyInProgress) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/recruiter/jobs/${job.id}/applicants`);
+        if (!res.ok) return;
+        const data = (await res.json()) as ApplicantRow[];
+        setApplicants(data);
+      } catch {
+        // ignore
+      }
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [job.id, anyInProgress]);
 
   const getInitials = (name: string) => {
     return name
@@ -146,6 +165,7 @@ export function ViewApplicants({
                     <th className="px-6 py-4 text-left text-sm font-medium text-gray-700">Email</th>
                     <th className="px-6 py-4 text-left text-sm font-medium text-gray-700">Phone Number</th>
                     <th className="px-6 py-4 text-left text-sm font-medium text-gray-700">Location</th>
+                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-700">Analysis progress</th>
                     <th className="px-6 py-4 text-left text-sm font-medium text-gray-700">Action</th>
                   </tr>
                 </thead>
@@ -173,9 +193,27 @@ export function ViewApplicants({
                           <span className="text-sm text-gray-900">{applicant.candidate_address ?? '—'}</span>
                         </td>
                         <td className="px-6 py-4">
+                          <div className="flex flex-col gap-1 min-w-[120px]">
+                            <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-[#FF13F0] rounded-full transition-all duration-500"
+                                style={{ width: `${applicant.analysis_progress}%` }}
+                              />
+                            </div>
+                            <span className="text-xs text-gray-600">
+                              {applicant.analysis_complete ? 'Complete' : `${applicant.analysis_progress}%`}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
                           <button
-                            onClick={() => onReviewApplicant(toApplicant(applicant, job.id))}
-                            className="bg-[#FF13F0] text-white px-4 py-2 rounded-lg text-sm hover:bg-[#FF13F0]/80 transition-all whitespace-nowrap"
+                            onClick={() => applicant.analysis_complete && onReviewApplicant(toApplicant(applicant, job.id))}
+                            disabled={!applicant.analysis_complete}
+                            className={
+                              applicant.analysis_complete
+                                ? 'bg-[#FF13F0] text-white px-4 py-2 rounded-lg text-sm hover:bg-[#FF13F0]/80 transition-all whitespace-nowrap'
+                                : 'bg-gray-300 text-gray-500 px-4 py-2 rounded-lg text-sm cursor-not-allowed whitespace-nowrap'
+                            }
                           >
                             View Detailed Report
                           </button>
