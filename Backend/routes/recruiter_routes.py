@@ -4,6 +4,19 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Query, status
 from pydantic import BaseModel, EmailStr
 
 from repositories import recruiter_repo, job_repo, application_repo, cv_repo, video_repo
+from services.translation_service import (
+  translate_job_title,
+  translate_job_description,
+  translate_question,
+  translate_company_name,
+  translate_branch_name,
+  translate_location,
+  translate_other_requirements,
+  translate_skills,
+  translate_work_mode,
+  translate_minimum_experience_display,
+  translate_salary_display,
+)
 
 router = APIRouter(prefix="/recruiter", tags=["recruiter"])
 
@@ -207,6 +220,51 @@ async def create_recruiter_job(
 
   print(f"create_recruiter_job: Creating job for recruiter_id={recruiter_id}")  # Debug logging
 
+  # Translate job content to Urdu
+  job_title_ur = None
+  job_description_ur = None
+  other_requirements_ur = None
+  company_name_ur = None
+  branch_name_ur = None
+  location_ur = None
+  skills_ur = None
+  work_mode_ur = None
+  minimum_experience_ur = None
+  salary_monthly_ur = None
+  questions_ur = None
+
+  try:
+    if payload.title:
+      job_title_ur = translate_job_title(payload.title)
+    if payload.otherRequirements:
+      job_description_ur = translate_job_description(payload.otherRequirements)
+      other_requirements_ur = translate_other_requirements(payload.otherRequirements)
+    if payload.companyName:
+      company_name_ur = translate_company_name(payload.companyName)
+    if payload.branchName:
+      branch_name_ur = translate_branch_name(payload.branchName)
+    if payload.location:
+      location_ur = translate_location(payload.location)
+    if payload.skills:
+      cleaned_skills = [s.strip() for s in payload.skills if s and s.strip()]
+      translated_skills = translate_skills(cleaned_skills) if cleaned_skills else []
+      trans_iter = iter(translated_skills)
+      skills_ur = [(next(trans_iter, None) or en) if (en and en.strip()) else (en or "") for en in payload.skills]
+    work_mode_ur = translate_work_mode(work_mode)
+    minimum_experience_ur = translate_minimum_experience_display(payload.minExperience)
+    if payload.salary and payload.salary > 0:
+      salary_monthly_ur = translate_salary_display(payload.salary)
+    if payload.questions:
+      questions_ur = []
+      for q in payload.questions:
+        if q and q.strip():
+          questions_ur.append(translate_question(q))
+        else:
+          questions_ur.append(None)
+    print(f"[translation] Translated job fields to Urdu")
+  except Exception as e:
+    print(f"[translation] Warning: Translation failed, continuing with English only: {e}")
+
   try:
     row = await job_repo.create_job(
       pool,
@@ -223,15 +281,26 @@ async def create_recruiter_job(
       other_requirements=payload.otherRequirements or "",
       cv_score_weightage=payload.cvWeight,
       video_score_weightage=payload.videoWeight,
+      job_title_ur=job_title_ur,
+      job_description_ur=job_description_ur,
+      company_name_ur=company_name_ur,
+      branch_name_ur=branch_name_ur,
+      skills_ur=skills_ur,
+      other_requirements_ur=other_requirements_ur,
+      location_ur=location_ur,
+      work_mode_ur=work_mode_ur,
+      salary_monthly_ur=salary_monthly_ur,
+      minimum_experience_ur=minimum_experience_ur,
     )
   except ValueError as exc:
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
-  # Store job-specific video questions linked to this job.
+  # Store job-specific video questions linked to this job (with Urdu translations).
   await job_repo.insert_job_questions(
     pool,
     job_id=int(row["job_id"]),
     questions=payload.questions,
+    questions_ur=questions_ur,
   )
 
   return RecruiterJob(
@@ -412,6 +481,51 @@ async def update_recruiter_job(
   if "Onsite" in payload.workMode:
     work_mode = "ONSITE"
   
+  # Re-translate job content to Urdu (since job was edited)
+  job_title_ur = None
+  job_description_ur = None
+  other_requirements_ur = None
+  company_name_ur = None
+  branch_name_ur = None
+  location_ur = None
+  skills_ur = None
+  work_mode_ur = None
+  minimum_experience_ur = None
+  salary_monthly_ur = None
+  questions_ur = None
+
+  try:
+    if payload.title:
+      job_title_ur = translate_job_title(payload.title)
+    if payload.otherRequirements:
+      job_description_ur = translate_job_description(payload.otherRequirements)
+      other_requirements_ur = translate_other_requirements(payload.otherRequirements)
+    if payload.companyName:
+      company_name_ur = translate_company_name(payload.companyName)
+    if payload.branchName:
+      branch_name_ur = translate_branch_name(payload.branchName)
+    if payload.location:
+      location_ur = translate_location(payload.location)
+    if payload.skills:
+      cleaned_skills = [s.strip() for s in payload.skills if s and s.strip()]
+      translated_skills = translate_skills(cleaned_skills) if cleaned_skills else []
+      trans_iter = iter(translated_skills)
+      skills_ur = [(next(trans_iter, None) or en) if (en and en.strip()) else (en or "") for en in payload.skills]
+    work_mode_ur = translate_work_mode(work_mode)
+    minimum_experience_ur = translate_minimum_experience_display(payload.minExperience)
+    if payload.salary and payload.salary > 0:
+      salary_monthly_ur = translate_salary_display(payload.salary)
+    if payload.questions:
+      questions_ur = []
+      for q in payload.questions:
+        if q and q.strip():
+          questions_ur.append(translate_question(q))
+        else:
+          questions_ur.append(None)
+    print(f"[translation] Re-translated job fields to Urdu")
+  except Exception as e:
+    print(f"[translation] Warning: Translation failed, continuing with English only: {e}")
+
   try:
     row = await job_repo.update_job(
       pool,
@@ -427,6 +541,16 @@ async def update_recruiter_job(
       other_requirements=payload.otherRequirements or "",
       cv_score_weightage=payload.cvWeight,
       video_score_weightage=payload.videoWeight,
+      job_title_ur=job_title_ur,
+      job_description_ur=job_description_ur,
+      company_name_ur=company_name_ur,
+      branch_name_ur=branch_name_ur,
+      skills_ur=skills_ur,
+      other_requirements_ur=other_requirements_ur,
+      location_ur=location_ur,
+      work_mode_ur=work_mode_ur,
+      salary_monthly_ur=salary_monthly_ur,
+      minimum_experience_ur=minimum_experience_ur,
     )
   except ValueError as exc:
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -434,11 +558,12 @@ async def update_recruiter_job(
   if not row:
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
   
-  # Update job questions
+  # Update job questions (with Urdu translations)
   await job_repo.update_job_questions(
     pool,
     job_id=job_id,
     questions=payload.questions,
+    questions_ur=questions_ur,
   )
   
   return RecruiterJob(

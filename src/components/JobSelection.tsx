@@ -20,14 +20,16 @@ interface ExtendedJob extends Job {
   companyName?: string;
   branchName?: string;
   minExperience: number;
+  minExperienceUr?: string | null;
   skills: string[];
   workMode: string[];
   salary: number;
+  salaryUr?: string | null;
   otherRequirements: string;
   jobDescription?: string;
 }
 
-/** Map API job shape to ExtendedJob (workMode: display as title-case e.g. Onsite/Remote) */
+/** Map API job shape to ExtendedJob. When API is called with lang=ur, title/company/location/skills/workMode/otherRequirements are already in Urdu. */
 function mapApiJobToExtended(api: Record<string, unknown>): ExtendedJob {
   const workMode = (api.workMode as string[]) ?? [];
   return {
@@ -42,9 +44,11 @@ function mapApiJobToExtended(api: Record<string, unknown>): ExtendedJob {
     status: (api.status === 'closed' ? 'closed' : 'open') as 'open' | 'closed',
     type: String(api.type ?? 'Full-time'),
     minExperience: Number(api.minExperience ?? 0),
+    minExperienceUr: api.minExperienceUr != null ? String(api.minExperienceUr) : undefined,
     skills: Array.isArray(api.skills) ? (api.skills as string[]) : [],
-    workMode: workMode.map((m) => (m === 'REMOTE' ? 'Remote' : m === 'ONSITE' ? 'Onsite' : m)),
+    workMode: workMode.map((m) => (typeof m === 'string' ? (m === 'REMOTE' ? 'Remote' : m === 'ONSITE' ? 'Onsite' : m) : String(m))),
     salary: Number(api.salary ?? 0),
+    salaryUr: api.salaryUr != null ? String(api.salaryUr) : undefined,
     otherRequirements: String(api.otherRequirements ?? ''),
     jobDescription: String(api.job_description ?? ''),
   };
@@ -91,11 +95,13 @@ export function JobSelection({ language, selectedJob, onJobSelect, onContinue }:
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const langParam = language === 'urdu' ? 'ur' : 'en';
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetch(`${API_BASE}/candidate/jobs`)
+    fetch(`${API_BASE}/candidate/jobs?lang=${langParam}`)
       .then((res) => {
         if (!res.ok) throw new Error(`Failed to load jobs: ${res.status}`);
         return res.json();
@@ -114,7 +120,7 @@ export function JobSelection({ language, selectedJob, onJobSelect, onContinue }:
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [langParam]);
 
   // Filter jobs based on search query
   const filteredJobs = jobs.filter(job => 
@@ -183,10 +189,10 @@ export function JobSelection({ language, selectedJob, onJobSelect, onContinue }:
                   </p>
                 )}
                 
-                {/* Minimum Experience */}
+                {/* Minimum Experience (use Urdu string when available and language is Urdu) */}
                 <div className="text-base text-gray-700">
                   <span className="font-medium">{t.minExperience}:</span>{' '}
-                  {job.minExperience} {job.minExperience === 1 ? t.year : t.years}
+                  {language === 'urdu' && job.minExperienceUr ? job.minExperienceUr : `${job.minExperience} ${job.minExperience === 1 ? t.year : t.years}`}
                 </div>
                 
                 {/* Skills */}
@@ -217,9 +223,9 @@ export function JobSelection({ language, selectedJob, onJobSelect, onContinue }:
                   ))}
                 </div>
                 
-                {/* Salary */}
+                {/* Salary (use Urdu string when available and language is Urdu) */}
                 <div className="text-lg font-medium text-[#000000]">
-                  {t.salary} {job.salary.toLocaleString()} {t.perMonth}
+                  {language === 'urdu' && job.salaryUr ? job.salaryUr : `${t.salary} ${job.salary.toLocaleString()} ${t.perMonth}`}
                 </div>
               </div>
               

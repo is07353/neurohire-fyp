@@ -2,7 +2,7 @@
 import asyncio
 import json
 import asyncpg
-from fastapi import APIRouter, Request, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Request, Depends, HTTPException, BackgroundTasks, Query
 from pydantic import BaseModel
 
 from repositories import candidate_repo, job_repo, cv_repo, application_repo, video_repo
@@ -78,19 +78,39 @@ async def create_test_candidate(pool: asyncpg.Pool = Depends(get_db_pool)):
 
 
 @router.get("/candidate/jobs")
-async def list_candidate_jobs(pool: asyncpg.Pool = Depends(get_db_pool)):
-    """List all open jobs for the candidate job-selection screen."""
-    return await job_repo.list_open_jobs(pool)
+async def list_candidate_jobs(
+    lang: str = Query("en", description="Language code: 'en' for English, 'ur' for Urdu"),
+    pool: asyncpg.Pool = Depends(get_db_pool),
+):
+    """List all open jobs for the candidate job-selection screen.
+    
+    Args:
+        lang: Language code ('en' for English, 'ur' for Urdu). Defaults to 'en'.
+    """
+    if lang.lower() not in ("en", "ur"):
+        lang = "en"  # Default to English if invalid lang code
+    return await job_repo.list_open_jobs(pool, lang=lang)
 
 
 @router.get("/candidate/jobs/{job_id}/questions")
-async def get_job_questions(job_id: str, pool: asyncpg.Pool = Depends(get_db_pool)):
-    """Return video interview questions for the given job (from job_questions table). Used by candidate flow."""
+async def get_job_questions(
+    job_id: str,
+    lang: str = Query("en", description="Language code: 'en' for English, 'ur' for Urdu"),
+    pool: asyncpg.Pool = Depends(get_db_pool),
+):
+    """Return video interview questions for the given job (from job_questions table). Used by candidate flow.
+    
+    Args:
+        job_id: Job ID
+        lang: Language code ('en' for English, 'ur' for Urdu). Defaults to 'en'.
+    """
+    if lang.lower() not in ("en", "ur"):
+        lang = "en"  # Default to English if invalid lang code
     try:
         jid = int(job_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid job_id")
-    job = await job_repo.get_job_by_id(pool, job_id=jid)
+    job = await job_repo.get_job_by_id(pool, job_id=jid, lang=lang)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     # Only expose questions for open jobs

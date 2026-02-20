@@ -227,6 +227,7 @@ No binary files are stored in PostgreSQL.
 - requests  
 - email-validator  
 - gradio_client  
+- pip install openai
 
 **Node**
 

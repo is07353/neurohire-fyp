@@ -50,6 +50,8 @@ export function VideoInterview({ language, jobId, onComplete }: VideoInterviewPr
   const [questionsLoading, setQuestionsLoading] = useState(true);
   const [questionsError, setQuestionsError] = useState<string | null>(null);
 
+  const langParam = language === 'urdu' ? 'ur' : 'en';
+
   useEffect(() => {
     if (!jobId) {
       setQuestions([]);
@@ -59,7 +61,7 @@ export function VideoInterview({ language, jobId, onComplete }: VideoInterviewPr
     let cancelled = false;
     setQuestionsLoading(true);
     setQuestionsError(null);
-    fetch(`${API_BASE}/candidate/jobs/${encodeURIComponent(jobId)}/questions`)
+    fetch(`${API_BASE}/candidate/jobs/${encodeURIComponent(jobId)}/questions?lang=${langParam}`)
       .then((res) => {
         if (!res.ok) throw new Error(res.status === 404 ? 'No questions for this job' : 'Failed to load questions');
         return res.json();
@@ -81,7 +83,7 @@ export function VideoInterview({ language, jobId, onComplete }: VideoInterviewPr
     return () => {
       cancelled = true;
     };
-  }, [jobId]);
+  }, [jobId, langParam]);
 
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [recordingState, setRecordingState] = useState<RecordingState>('idle');

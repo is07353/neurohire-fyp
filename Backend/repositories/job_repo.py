@@ -11,24 +11,38 @@ def _validate_weightage_sum_100(cv_score_weightage: int, video_score_weightage: 
         )
 
 
-async def list_open_jobs(pool: asyncpg.Pool) -> list[dict]:
-    """List all jobs with status 'open' for candidate job selection."""
+async def list_open_jobs(pool: asyncpg.Pool, lang: str = "en") -> list[dict]:
+    """List all jobs with status 'open' for candidate job selection.
+    
+    Args:
+        lang: Language code ('en' for English, 'ur' for Urdu). Defaults to 'en'.
+    """
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
             SELECT
                 job_id,
                 job_title,
+                job_title_ur,
                 company_name,
+                company_name_ur,
                 branch_name,
+                branch_name_ur,
                 job_description,
+                job_description_ur,
                 status,
                 skills,
+                skills_ur,
                 minimum_experience_years,
+                minimum_experience_ur,
                 other_requirements,
+                other_requirements_ur,
                 location,
+                location_ur,
                 work_mode::text AS work_mode,
+                work_mode_ur,
                 salary_monthly_pkr,
+                salary_monthly_ur,
                 cv_score_weightage,
                 video_score_weightage
             FROM jobs
@@ -36,21 +50,31 @@ async def list_open_jobs(pool: asyncpg.Pool) -> list[dict]:
             ORDER BY job_id;
             """
         )
+    
+    use_urdu = lang.lower() == "ur"
+    
+    def _pick(field_en, field_ur):
+        if use_urdu and field_ur:
+            return field_ur
+        return field_en
+    
     return [
         {
             "id": str(r["job_id"]),
-            "title": r["job_title"],
-            "company_name": r["company_name"] or "",
-            "branch_name": r["branch_name"] or "",
-            "job_description": r["job_description"],
+            "title": _pick(r["job_title"], r.get("job_title_ur")) or r["job_title"],
+            "company_name": _pick(r["company_name"] or "", r.get("company_name_ur")) or "",
+            "branch_name": _pick(r["branch_name"] or "", r.get("branch_name_ur")) or "",
+            "job_description": _pick(r["job_description"], r.get("job_description_ur")) or r["job_description"],
             "status": r["status"],
-            "location": r["location"] or "",
+            "location": _pick(r["location"] or "", r.get("location_ur")) or "",
             "type": "Full-time",
             "minExperience": r["minimum_experience_years"] or 0,
-            "skills": list(r["skills"]) if r["skills"] else [],
-            "workMode": [r["work_mode"]] if r["work_mode"] else [],
+            "minExperienceUr": r.get("minimum_experience_ur"),
+            "skills": (list(r["skills_ur"]) if use_urdu and r.get("skills_ur") else None) or (list(r["skills"]) if r["skills"] else []),
+            "workMode": [r.get("work_mode_ur")] if (use_urdu and r.get("work_mode_ur")) else (["Onsite"] if r.get("work_mode") == "ONSITE" else (["Remote"] if r.get("work_mode") == "REMOTE" else [])),
             "salary": r["salary_monthly_pkr"] or 0,
-            "otherRequirements": r["other_requirements"] or "",
+            "salaryUr": r.get("salary_monthly_ur"),
+            "otherRequirements": _pick(r["other_requirements"] or "", r.get("other_requirements_ur")) or "",
             "cv_score_weightage": r["cv_score_weightage"],
             "video_score_weightage": r["video_score_weightage"],
         }
@@ -233,6 +257,16 @@ async def create_job(
     other_requirements: str,
     cv_score_weightage: int,
     video_score_weightage: int,
+    job_title_ur: str | None = None,
+    job_description_ur: str | None = None,
+    company_name_ur: str | None = None,
+    branch_name_ur: str | None = None,
+    skills_ur: list[str] | None = None,
+    other_requirements_ur: str | None = None,
+    location_ur: str | None = None,
+    work_mode_ur: str | None = None,
+    salary_monthly_ur: str | None = None,
+    minimum_experience_ur: str | None = None,
 ) -> dict:
     """Insert a new job row."""
     _validate_weightage_sum_100(cv_score_weightage, video_score_weightage)
@@ -246,26 +280,42 @@ async def create_job(
         }
     )
 
+    # Ensure skills_ur is same length as skills (use English as fallback for missing)
+    skills_ur_list = skills_ur if skills_ur is not None else []
+    if len(skills_ur_list) < len(skills):
+        skills_ur_list = list(skills_ur_list) + [skills[i] for i in range(len(skills_ur_list), len(skills))]
+    skills_ur_list = skills_ur_list[: len(skills)]
+
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """
             INSERT INTO jobs (
                 recruiter_id,
                 job_title,
+                job_title_ur,
                 company_name,
+                company_name_ur,
                 branch_name,
+                branch_name_ur,
                 job_description,
+                job_description_ur,
                 status,
                 skills,
+                skills_ur,
                 minimum_experience_years,
+                minimum_experience_ur,
                 other_requirements,
+                other_requirements_ur,
                 location,
+                location_ur,
                 work_mode,
+                work_mode_ur,
                 salary_monthly_pkr,
+                salary_monthly_ur,
                 cv_score_weightage,
                 video_score_weightage
             )
-            VALUES ($1, $2, $3, $4, $5, 'open', $6, $7, $8, $9, $10, $11, $12, $13)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'open', $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
             RETURNING
                 job_id,
                 job_title,
@@ -279,15 +329,25 @@ async def create_job(
             """,
             recruiter_id,
             job_title,
+            job_title_ur,
             company_name,
+            company_name_ur,
             branch_name,
+            branch_name_ur,
             job_description,
+            job_description_ur,
             skills,
+            skills_ur_list,
             minimum_experience_years,
+            minimum_experience_ur,
             other_requirements,
+            other_requirements_ur,
             location,
+            location_ur,
             work_mode,
+            work_mode_ur,
             salary_monthly_pkr,
+            salary_monthly_ur,
             cv_score_weightage,
             video_score_weightage,
         )
@@ -300,6 +360,7 @@ async def insert_job_questions(
     *,
     job_id: int,
     questions: list[str],
+    questions_ur: list[str] | None = None,
 ) -> None:
     """Insert job-specific video questions for a job_id."""
     # Clean up any empty questions
@@ -307,15 +368,35 @@ async def insert_job_questions(
     if not cleaned:
         return
 
+    # Match Urdu questions with English questions by index
+    cleaned_ur = None
+    if questions_ur:
+        cleaned_ur = [q.strip() if q else None for q in questions_ur]
+        # Ensure lists are same length (pad with None if needed)
+        while len(cleaned_ur) < len(cleaned):
+            cleaned_ur.append(None)
+        cleaned_ur = cleaned_ur[:len(cleaned)]  # Trim if longer
+
     async with pool.acquire() as conn:
-        await conn.executemany(
-            "INSERT INTO job_questions (job_id, question_text) VALUES ($1, $2);",
-            [(job_id, q) for q in cleaned],
-        )
+        if cleaned_ur:
+            await conn.executemany(
+                "INSERT INTO job_questions (job_id, question_text, question_text_ur) VALUES ($1, $2, $3);",
+                [(job_id, q, q_ur) for q, q_ur in zip(cleaned, cleaned_ur)],
+            )
+        else:
+            await conn.executemany(
+                "INSERT INTO job_questions (job_id, question_text) VALUES ($1, $2);",
+                [(job_id, q) for q in cleaned],
+            )
 
 
-async def get_job_by_id(pool: asyncpg.Pool, job_id: int) -> dict | None:
-    """Get a single job by ID with all details including questions."""
+async def get_job_by_id(pool: asyncpg.Pool, job_id: int, lang: str = "en") -> dict | None:
+    """Get a single job by ID with all details including questions.
+    
+    Args:
+        job_id: Job ID to fetch
+        lang: Language code ('en' for English, 'ur' for Urdu). Defaults to 'en'.
+    """
     async with pool.acquire() as conn:
         # Get job details
         job_row = await conn.fetchrow(
@@ -324,16 +405,26 @@ async def get_job_by_id(pool: asyncpg.Pool, job_id: int) -> dict | None:
                 job_id,
                 recruiter_id,
                 job_title,
+                job_title_ur,
                 company_name,
+                company_name_ur,
                 branch_name,
+                branch_name_ur,
                 job_description,
+                job_description_ur,
                 status,
                 skills,
+                skills_ur,
                 minimum_experience_years,
+                minimum_experience_ur,
                 other_requirements,
+                other_requirements_ur,
                 location,
+                location_ur,
                 work_mode::text AS work_mode,
+                work_mode_ur,
                 salary_monthly_pkr,
+                salary_monthly_ur,
                 cv_score_weightage,
                 video_score_weightage
             FROM jobs
@@ -345,10 +436,11 @@ async def get_job_by_id(pool: asyncpg.Pool, job_id: int) -> dict | None:
         if not job_row:
             return None
         
-        # Get job questions
+        # Get job questions (with Urdu if available)
+        use_urdu = lang.lower() == "ur"
         question_rows = await conn.fetch(
             """
-            SELECT question_text
+            SELECT question_text, question_text_ur
             FROM job_questions
             WHERE job_id = $1
             ORDER BY question_id;
@@ -356,9 +448,14 @@ async def get_job_by_id(pool: asyncpg.Pool, job_id: int) -> dict | None:
             job_id,
         )
         
-        questions = [r["question_text"] for r in question_rows]
+        questions = []
+        for r in question_rows:
+            if use_urdu and r["question_text_ur"]:
+                questions.append(r["question_text_ur"])
+            else:
+                questions.append(r["question_text"])
 
-        return _job_row_to_dict(job_row, questions)
+        return _job_row_to_dict(job_row, questions, lang=lang)
 
     return None
 
@@ -378,34 +475,65 @@ async def get_job_questions_only(pool: asyncpg.Pool, job_id: int) -> list[str]:
     return [r["question_text"] for r in rows]
 
 
-def _job_row_to_dict(job_row, questions: list[str]) -> dict:
-    """Build job dict from DB row and questions list."""
+def _job_row_to_dict(job_row, questions: list[str], lang: str = "en") -> dict:
+    """Build job dict from DB row and questions list.
+    
+    Args:
+        job_row: Database row from jobs table
+        questions: List of question texts (already filtered by lang)
+        lang: Language code ('en' for English, 'ur' for Urdu). Defaults to 'en'.
+    """
+    use_urdu = lang.lower() == "ur"
+
+    def _pick(en_val, ur_val):
+        if use_urdu and ur_val:
+            return ur_val
+        return en_val
+
+    title = _pick(job_row["job_title"], job_row.get("job_title_ur")) or job_row["job_title"]
+    company_name = _pick(job_row["company_name"] or "", job_row.get("company_name_ur")) or ""
+    branch_name = _pick(job_row["branch_name"] or "", job_row.get("branch_name_ur")) or ""
+    location = _pick(job_row["location"] or "", job_row.get("location_ur")) or ""
+
     job_desc = job_row["job_description"]
-    if isinstance(job_desc, dict):
-        other_req = job_desc.get("other_requirements", job_row["other_requirements"] or "")
+    other_req_ur = job_row.get("other_requirements_ur")
+    if use_urdu and other_req_ur:
+        other_req = other_req_ur
     else:
-        other_req = job_row["other_requirements"] or ""
+        if isinstance(job_desc, dict):
+            other_req = job_desc.get("other_requirements", job_row["other_requirements"] or "")
+        else:
+            other_req = job_row["other_requirements"] or ""
+
+    skills = (list(job_row["skills_ur"]) if use_urdu and job_row.get("skills_ur") else None) or (list(job_row["skills"]) if job_row["skills"] else [])
 
     work_mode_ui = []
     if job_row["work_mode"]:
-        if job_row["work_mode"] == "ONSITE":
+        if use_urdu and job_row.get("work_mode_ur"):
+            work_mode_ui = [job_row["work_mode_ur"]]
+        elif job_row["work_mode"] == "ONSITE":
             work_mode_ui = ["Onsite"]
         elif job_row["work_mode"] == "REMOTE":
             work_mode_ui = ["Remote"]
 
+    salary = job_row["salary_monthly_pkr"] or 0
+    min_exp = job_row["minimum_experience_years"] or 0
+
     return {
         "id": str(job_row["job_id"]),
         "recruiter_id": job_row["recruiter_id"],
-        "title": job_row["job_title"],
-        "company_name": job_row["company_name"] or "",
-        "branch_name": job_row["branch_name"] or "",
-        "location": job_row["location"] or "",
+        "title": title,
+        "company_name": company_name,
+        "branch_name": branch_name,
+        "location": location,
         "status": job_row["status"],
-        "skills": list(job_row["skills"]) if job_row["skills"] else [],
-        "minExperience": job_row["minimum_experience_years"] or 0,
+        "skills": skills,
+        "minExperience": min_exp,
+        "minExperienceUr": job_row.get("minimum_experience_ur"),
         "otherRequirements": other_req,
         "workMode": work_mode_ui,
-        "salary": job_row["salary_monthly_pkr"] or 0,
+        "salary": salary,
+        "salaryUr": job_row.get("salary_monthly_ur"),
         "cv_score_weightage": job_row["cv_score_weightage"],
         "video_score_weightage": job_row["video_score_weightage"],
         "questions": questions,
@@ -417,6 +545,7 @@ async def update_job_questions(
     *,
     job_id: int,
     questions: list[str],
+    questions_ur: list[str] | None = None,
 ) -> None:
     """Replace all job questions for a job_id (delete old, insert new)."""
     async with pool.acquire() as conn:
@@ -428,7 +557,24 @@ async def update_job_questions(
         
         # Insert new questions
         cleaned = [q.strip() for q in questions if q and q.strip()]
-        if cleaned:
+        if not cleaned:
+            return
+        
+        # Match Urdu questions with English questions by index
+        cleaned_ur = None
+        if questions_ur:
+            cleaned_ur = [q.strip() if q else None for q in questions_ur]
+            # Ensure lists are same length (pad with None if needed)
+            while len(cleaned_ur) < len(cleaned):
+                cleaned_ur.append(None)
+            cleaned_ur = cleaned_ur[:len(cleaned)]  # Trim if longer
+        
+        if cleaned_ur:
+            await conn.executemany(
+                "INSERT INTO job_questions (job_id, question_text, question_text_ur) VALUES ($1, $2, $3);",
+                [(job_id, q, q_ur) for q, q_ur in zip(cleaned, cleaned_ur)],
+            )
+        else:
             await conn.executemany(
                 "INSERT INTO job_questions (job_id, question_text) VALUES ($1, $2);",
                 [(job_id, q) for q in cleaned],
@@ -542,6 +688,16 @@ async def update_job(
     other_requirements: str,
     cv_score_weightage: int,
     video_score_weightage: int,
+    job_title_ur: str | None = None,
+    job_description_ur: str | None = None,
+    company_name_ur: str | None = None,
+    branch_name_ur: str | None = None,
+    skills_ur: list[str] | None = None,
+    other_requirements_ur: str | None = None,
+    location_ur: str | None = None,
+    work_mode_ur: str | None = None,
+    salary_monthly_ur: str | None = None,
+    minimum_experience_ur: str | None = None,
 ) -> dict | None:
     """Update all fields of an existing job."""
     _validate_weightage_sum_100(cv_score_weightage, video_score_weightage)
@@ -554,6 +710,11 @@ async def update_job(
             "other_requirements": other_requirements,
         }
     )
+
+    skills_ur_list = skills_ur if skills_ur is not None else []
+    if len(skills_ur_list) < len(skills):
+        skills_ur_list = list(skills_ur_list) + [skills[i] for i in range(len(skills_ur_list), len(skills))]
+    skills_ur_list = skills_ur_list[: len(skills)]
     
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
@@ -561,17 +722,27 @@ async def update_job(
             UPDATE jobs
             SET
                 job_title = $2,
-                company_name = $3,
-                branch_name = $4,
-                job_description = $5,
-                location = $6,
-                work_mode = $7,
-                salary_monthly_pkr = $8,
-                minimum_experience_years = $9,
-                skills = $10,
-                other_requirements = $11,
-                cv_score_weightage = $12,
-                video_score_weightage = $13,
+                job_title_ur = $3,
+                company_name = $4,
+                company_name_ur = $5,
+                branch_name = $6,
+                branch_name_ur = $7,
+                job_description = $8,
+                job_description_ur = $9,
+                location = $10,
+                location_ur = $11,
+                work_mode = $12,
+                work_mode_ur = $13,
+                salary_monthly_pkr = $14,
+                salary_monthly_ur = $15,
+                minimum_experience_years = $16,
+                minimum_experience_ur = $17,
+                skills = $18,
+                skills_ur = $19,
+                other_requirements = $20,
+                other_requirements_ur = $21,
+                cv_score_weightage = $22,
+                video_score_weightage = $23,
                 updated_at = NOW()
             WHERE job_id = $1
             RETURNING
@@ -587,15 +758,25 @@ async def update_job(
             """,
             job_id,
             job_title,
+            job_title_ur,
             company_name,
+            company_name_ur,
             branch_name,
+            branch_name_ur,
             job_description,
+            job_description_ur,
             location,
+            location_ur,
             work_mode,
+            work_mode_ur,
             salary_monthly_pkr,
+            salary_monthly_ur,
             minimum_experience_years,
+            minimum_experience_ur,
             skills,
+            skills_ur_list,
             other_requirements,
+            other_requirements_ur,
             cv_score_weightage,
             video_score_weightage,
         )
