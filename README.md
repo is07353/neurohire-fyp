@@ -1,4 +1,8 @@
 # NeuroHire – Full Stack Setup Guide
+public acess
+install ngrock
+run 
+ngrok http 3000
 
 This project includes:
 

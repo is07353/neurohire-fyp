@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ArrowLeft, Plus, X, Trash2, ChevronDown } from 'lucide-react';
 import neurohireLogo from '@/assets/neurohire-logo-2.png';
+import { getApiBase } from '@/lib/apiConfig';
 
 interface AddJobProps {
   recruiterName: string;
@@ -8,10 +9,6 @@ interface AddJobProps {
   onBack: () => void;
   onLogout: () => void;
 }
-
-const API_BASE =
-  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
-  'http://127.0.0.1:8000';
 
 export function AddJob({ recruiterName, recruiterId, onBack, onLogout }: AddJobProps) {
   const [title, setTitle] = useState('');
@@ -117,7 +114,7 @@ export function AddJob({ recruiterName, recruiterId, onBack, onLogout }: AddJobP
       }
       
       // Build URL with recruiter_id query parameter (required)
-      const url = `${API_BASE}/recruiter/jobs?recruiter_id=${recruiterId}`;
+      const url = `${getApiBase()}/recruiter/jobs?recruiter_id=${recruiterId}`;
       // eslint-disable-next-line no-console
       console.log('AddJob: Creating job with recruiter_id:', recruiterId);
       

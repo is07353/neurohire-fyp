@@ -2,10 +2,7 @@ import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { Users, Briefcase, UserCheck, TrendingUp, ExternalLink, Tag } from 'lucide-react';
 import neurohireLogo from '@/assets/neurohire-logo-2.png';
-
-const API_BASE =
-  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
-  'http://127.0.0.1:8000';
+import { getApiBase } from '@/lib/apiConfig';
 
 interface CompanyOverviewProps {
   companyName: string;
@@ -46,8 +43,8 @@ export function CompanyOverview({ companyName }: CompanyOverviewProps) {
       try {
         const params = new URLSearchParams({ company_name: companyName });
         const [profileRes, analyticsRes] = await Promise.all([
-          fetch(`${API_BASE}/company/profile?${params}`),
-          fetch(`${API_BASE}/company/analytics?${params}`),
+          fetch(`${getApiBase()}/company/profile?${params}`),
+          fetch(`${getApiBase()}/company/analytics?${params}`),
         ]);
         if (!profileRes.ok) throw new Error('Failed to load company profile');
         const profileData = await profileRes.json();

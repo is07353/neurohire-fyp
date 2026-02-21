@@ -2,10 +2,7 @@ import { useState, useEffect } from 'react';
 import { ChevronDown, ArrowLeft } from 'lucide-react';
 import neurohireLogo from '@/assets/neurohire-logo-2.png';
 import type { Job, Applicant } from '../../App';
-
-const API_BASE =
-  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
-  'http://127.0.0.1:8000';
+import { getApiBase } from '@/lib/apiConfig';
 
 interface ViewApplicantsProps {
   job: Job;
@@ -61,7 +58,7 @@ export function ViewApplicants({
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`${API_BASE}/recruiter/jobs/${job.id}/applicants`);
+        const res = await fetch(`${getApiBase()}/recruiter/jobs/${job.id}/applicants`);
         if (!res.ok) throw new Error(`Failed to load applicants: ${res.status}`);
         const data = (await res.json()) as ApplicantRow[];
         if (!cancelled) setApplicants(data);
@@ -81,7 +78,7 @@ export function ViewApplicants({
     if (!anyInProgress) return;
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`${API_BASE}/recruiter/jobs/${job.id}/applicants`);
+        const res = await fetch(`${getApiBase()}/recruiter/jobs/${job.id}/applicants`);
         if (!res.ok) return;
         const data = (await res.json()) as ApplicantRow[];
         setApplicants(data);

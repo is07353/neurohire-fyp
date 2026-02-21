@@ -2,10 +2,7 @@ import { useState, useEffect } from 'react';
 import { User, CheckCircle, XCircle, ChevronDown, ArrowLeft, AlertTriangle, Download, Brain, ChevronLeft, ChevronRight } from 'lucide-react';
 import neurohireLogo from '@/assets/neurohire-logo-2.png';
 import type { Applicant, Job } from '../../App';
-
-const API_BASE =
-  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
-  'http://127.0.0.1:8000';
+import { getApiBase } from '@/lib/apiConfig';
 
 interface ReviewData {
   cv_score: number | null;
@@ -58,7 +55,7 @@ export function CandidateReview({
     }
     let cancelled = false;
     setReviewLoading(true);
-    fetch(`${API_BASE}/recruiter/applications/${applicationId}/review`)
+    fetch(`${getApiBase()}/recruiter/applications/${applicationId}/review`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data: ReviewData | null) => {
         if (!cancelled) setReviewData(data);
@@ -78,7 +75,7 @@ export function CandidateReview({
     const jobId = job?.id;
     if (!jobId) return;
     let cancelled = false;
-    fetch(`${API_BASE}/recruiter/jobs/${jobId}/questions`)
+    fetch(`${getApiBase()}/recruiter/jobs/${jobId}/questions`)
       .then((res) => (res.ok ? res.json() : { questions: [] }))
       .then((data: { questions: string[] }) => {
         if (!cancelled) setJobQuestions(data.questions ?? []);
@@ -95,7 +92,7 @@ export function CandidateReview({
     const applicationId = applicant.id;
     if (!applicationId) return;
     let cancelled = false;
-    fetch(`${API_BASE}/recruiter/applications/${applicationId}/video-submissions`)
+    fetch(`${getApiBase()}/recruiter/applications/${applicationId}/video-submissions`)
       .then((res) => (res.ok ? res.json() : { submissions: [] }))
       .then(
         (data: {
@@ -125,7 +122,7 @@ export function CandidateReview({
     const applicationId = applicant.id;
     if (!applicationId) return;
     let cancelled = false;
-    fetch(`${API_BASE}/recruiter/applications/${applicationId}/cv`)
+    fetch(`${getApiBase()}/recruiter/applications/${applicationId}/cv`)
       .then((res) => (res.ok ? res.json() : { cv_url: null }))
       .then((data: { cv_url: string | null }) => {
         if (!cancelled) setCvUrl(data.cv_url ?? null);
@@ -200,7 +197,7 @@ export function CandidateReview({
     if (!modalType || !applicant.id) return;
     setDecisionError(null);
     try {
-      const res = await fetch(`${API_BASE}/recruiter/applications/${applicant.id}/decision`, {
+      const res = await fetch(`${getApiBase()}/recruiter/applications/${applicant.id}/decision`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ decision: modalType }),

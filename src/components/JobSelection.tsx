@@ -1,12 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import type { Job } from '../App';
 import { MapPin, Search, ChevronDown, ChevronUp } from 'lucide-react';
+import { getApiBase } from '@/lib/apiConfig';
 
 type Language = 'english' | 'urdu' | null;
-
-const API_BASE =
-  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
-  'http://127.0.0.1:8000';
 
 interface JobSelectionProps {
   language: Language;
@@ -101,7 +98,7 @@ export function JobSelection({ language, selectedJob, onJobSelect, onContinue }:
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetch(`${API_BASE}/candidate/jobs?lang=${langParam}`)
+    fetch(`${getApiBase()}/candidate/jobs?lang=${langParam}`)
       .then((res) => {
         if (!res.ok) throw new Error(`Failed to load jobs: ${res.status}`);
         return res.json();
@@ -161,7 +158,7 @@ export function JobSelection({ language, selectedJob, onJobSelect, onContinue }:
       {error && !loading && (
         <div className="text-center py-12 text-red-600">
           <p className="text-xl">{error}</p>
-          <p className="text-sm mt-2">Ensure the backend is running at {API_BASE}</p>
+          <p className="text-sm mt-2">Ensure the backend is running at {getApiBase()}</p>
         </div>
       )}
       

@@ -8,10 +8,7 @@ import { VideoInterview } from '../VideoInterview';
 import { SubmissionComplete } from '../SubmissionComplete';
 import { ProgressIndicator } from '../ProgressIndicator';
 import { ArrowLeft } from 'lucide-react';
-
-const API_BASE =
-  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
-  'http://127.0.0.1:8000';
+import { getApiBase } from '@/lib/apiConfig';
 
 export type Language = 'english' | 'urdu' | null;
 
@@ -73,7 +70,7 @@ export function CandidateDashboard({ onBackToLanding }: CandidateDashboardProps)
         branch_name: (selectedJob as { branchName?: string }).branchName ?? undefined,
         job_description: (selectedJob as { jobDescription?: string }).jobDescription ?? undefined,
       };
-      await fetch(`${API_BASE}/candidate/selected-job`, {
+      await fetch(`${getApiBase()}/candidate/selected-job`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

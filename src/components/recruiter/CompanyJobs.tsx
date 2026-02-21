@@ -1,10 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Search, Briefcase, MapPin } from 'lucide-react';
 import neurohireLogo from '@/assets/neurohire-logo-2.png';
-
-const API_BASE =
-  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
-  'http://127.0.0.1:8000';
+import { getApiBase } from '@/lib/apiConfig';
 
 interface CompanyJobsProps {
   companyName: string;
@@ -40,7 +37,7 @@ export function CompanyJobs({ companyName }: CompanyJobsProps) {
     let cancelled = false;
     setLoading(true);
     const params = new URLSearchParams({ company_name: companyName });
-    fetch(`${API_BASE}/company/jobs?${params}`)
+    fetch(`${getApiBase()}/company/jobs?${params}`)
       .then((res) => (res.ok ? res.json() : { jobs: [] }))
       .then((data: { jobs: Array<{ id: string; title: string; location: string; salary_monthly_pkr: number; recruiter_name: string; status: string; created_at: string }> }) => {
         if (cancelled) return;

@@ -1,7 +1,11 @@
 import { generateReactHelpers } from "@uploadthing/react";
 
-// React-side helpers for talking to the UploadThing Express server
-// Backend will run on http://localhost:4000/api/uploadthing
+// Use same-origin /uploadthing so when opened via ngrok, Vite proxies to the UploadThing server (no CORS).
+const uploadThingUrl =
+  typeof window !== "undefined"
+    ? `${window.location.origin}/uploadthing`
+    : "http://localhost:4000/api/uploadthing";
+
 export const { useUploadThing } = generateReactHelpers({
-  url: "http://localhost:4000/api/uploadthing",
+  url: uploadThingUrl,
 });

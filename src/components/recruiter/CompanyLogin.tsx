@@ -1,15 +1,12 @@
 import { useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
+import { getApiBase } from '@/lib/apiConfig';
 
 interface CompanyLoginProps {
   onLogin: (companyName: string) => void;
   onBack: () => void;
   onSignUp: () => void;
 }
-
-const API_BASE =
-  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
-  'http://127.0.0.1:8000';
 
 export function CompanyLogin({ onLogin, onBack, onSignUp }: CompanyLoginProps) {
   const [email, setEmail] = useState('');
@@ -29,7 +26,7 @@ export function CompanyLogin({ onLogin, onBack, onSignUp }: CompanyLoginProps) {
     setLoginError(null);
     setLoggingIn(true);
     try {
-      const res = await fetch(`${API_BASE}/company/login`, {
+      const res = await fetch(`${getApiBase()}/company/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),

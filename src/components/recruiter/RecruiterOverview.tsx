@@ -1,10 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Users, AlertCircle, Star } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-
-const API_BASE =
-  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
-  'http://127.0.0.1:8000';
+import { getApiBase } from '@/lib/apiConfig';
 
 interface RecruiterOverviewProps {
   recruiterName: string;
@@ -48,7 +45,7 @@ export function RecruiterOverview({ recruiterName, recruiterId }: RecruiterOverv
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetch(`${API_BASE}/recruiter/analytics?recruiter_id=${recruiterId}`)
+    fetch(`${getApiBase()}/recruiter/analytics?recruiter_id=${recruiterId}`)
       .then((res) => (res.ok ? res.json() : emptyAnalytics))
       .then((data: RecruiterAnalytics) => {
         if (!cancelled) setAnalytics(data);

@@ -1,9 +1,7 @@
 import { Language, CandidateInfo } from '../App';
 import { User, Phone, Mail, MapPin } from 'lucide-react';
 import { useState, useEffect } from 'react';
-
-
-
+import { getApiBase } from '@/lib/apiConfig';
 
 interface ReviewInformationProps {
   language: Language;
@@ -12,10 +10,6 @@ interface ReviewInformationProps {
   onReupload: () => void;
   onContinue: () => void;
 }
-
-const API_BASE =
-  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
-  'http://127.0.0.1:8000';
 
 const translations = {
   english: {
@@ -68,7 +62,7 @@ export function ReviewInformation({
     const maxPolls = 10;
 
     function fetchOverview() {
-      fetch(`${API_BASE}/candidate/overview`)
+      fetch(`${getApiBase()}/candidate/overview`)
         .then(res => res.json())
         .then(data => {
           if (cancelled) return;
@@ -118,7 +112,7 @@ export function ReviewInformation({
     setSaveError(null);
     setSaving(true);
     try {
-      const res = await fetch(`${API_BASE}/candidate/review`, {
+      const res = await fetch(`${getApiBase()}/candidate/review`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

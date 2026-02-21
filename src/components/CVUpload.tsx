@@ -2,6 +2,7 @@ import { Language } from '../App';
 import { Upload, FileText, CheckCircle } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useUploadThing } from '../../lib/uploadthing';
+import { getApiBase } from '@/lib/apiConfig';
 
 interface CVUploadProps {
   language: Language;
@@ -31,10 +32,6 @@ const translations = {
   },
 };
 
-const API_BASE =
-  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
-  'http://127.0.0.1:8000';
-
 export function CVUpload({ language, cvFile, onCVUpload, onContinue }: CVUploadProps) {
   const t = translations[language || 'english'];
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -50,7 +47,7 @@ export function CVUpload({ language, cvFile, onCVUpload, onContinue }: CVUploadP
         const first = Array.isArray(res) ? res[0] : undefined;
         const url = first?.url as string | undefined;
         if (url) {
-          fetch(`${API_BASE}/candidate/cv-url`, {
+          fetch(`${getApiBase()}/candidate/cv-url`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

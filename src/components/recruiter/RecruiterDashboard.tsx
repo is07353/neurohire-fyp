@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Plus, Search, Grid, LogOut, Edit, MoreVertical, BarChart3 } from 'lucide-react';
 import { Job } from '../../App';
 import { RecruiterOverview } from './RecruiterOverview';
+import { getApiBase } from '@/lib/apiConfig';
 
 interface RecruiterDashboardProps {
   recruiterName: string;
@@ -11,10 +12,6 @@ interface RecruiterDashboardProps {
   onEditJob: (job: Job) => void;
   onAddJob: () => void;
 }
-
-const API_BASE =
-  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
-  'http://127.0.0.1:8000';
 
 export function RecruiterDashboard({
   recruiterName,
@@ -47,7 +44,7 @@ export function RecruiterDashboard({
           console.error('RecruiterDashboard: Invalid recruiterId, cannot convert to number');
           return;
         }
-        const res = await fetch(`${API_BASE}/recruiter/jobs?recruiter_id=${recruiterIdParam}`);
+        const res = await fetch(`${getApiBase()}/recruiter/jobs?recruiter_id=${recruiterIdParam}`);
         if (!res.ok) {
           // eslint-disable-next-line no-console
           console.error('Failed to load recruiter jobs', res.status, await res.text().catch(() => ''));
@@ -108,7 +105,7 @@ export function RecruiterDashboard({
     ));
     
     try {
-      const res = await fetch(`${API_BASE}/recruiter/jobs/${jobId}/status`, {
+      const res = await fetch(`${getApiBase()}/recruiter/jobs/${jobId}/status`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -175,7 +172,7 @@ export function RecruiterDashboard({
     if (!deleteConfirmJob) return;
     
     try {
-      const res = await fetch(`${API_BASE}/recruiter/jobs/${deleteConfirmJob.id}`, {
+      const res = await fetch(`${getApiBase()}/recruiter/jobs/${deleteConfirmJob.id}`, {
         method: 'DELETE',
       });
       

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Search, UserPlus, CheckCircle, XCircle, Clock, Mail, Phone, Building2 } from 'lucide-react';
 import neurohireLogo from '@/assets/neurohire-logo-2.png';
+import { getApiBase } from '@/lib/apiConfig';
 
 interface CompanyRecruitersProps {
   companyName: string;
@@ -18,10 +19,6 @@ interface Recruiter {
   totalApplicants: number;
 }
 
-const API_BASE =
-  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
-  'http://127.0.0.1:8000';
-
 export function CompanyRecruiters({ companyName }: CompanyRecruitersProps) {
   const [recruiters, setRecruiters] = useState<Recruiter[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -32,7 +29,7 @@ export function CompanyRecruiters({ companyName }: CompanyRecruitersProps) {
     const loadRecruiters = async () => {
       try {
         const res = await fetch(
-          `${API_BASE}/recruiter/company-recruiters?company_name=${encodeURIComponent(companyName)}`
+          `${getApiBase()}/recruiter/company-recruiters?company_name=${encodeURIComponent(companyName)}`
         );
         if (!res.ok) {
           // eslint-disable-next-line no-console
@@ -56,7 +53,7 @@ export function CompanyRecruiters({ companyName }: CompanyRecruitersProps) {
 
   const handleApprove = async (recruiterId: number) => {
     try {
-      const res = await fetch(`${API_BASE}/recruiter/${recruiterId}/approve`, {
+      const res = await fetch(`${getApiBase()}/recruiter/${recruiterId}/approve`, {
         method: 'POST',
       });
       if (!res.ok) return;
@@ -70,7 +67,7 @@ export function CompanyRecruiters({ companyName }: CompanyRecruitersProps) {
 
   const handleDisable = async (recruiterId: number) => {
     try {
-      const res = await fetch(`${API_BASE}/recruiter/${recruiterId}/disable`, {
+      const res = await fetch(`${getApiBase()}/recruiter/${recruiterId}/disable`, {
         method: 'POST',
       });
       if (!res.ok) return;
@@ -85,7 +82,7 @@ export function CompanyRecruiters({ companyName }: CompanyRecruitersProps) {
   const handleDelete = async (recruiterId: number) => {
     if (confirm('Are you sure you want to delete this recruiter? This action cannot be undone.')) {
       try {
-        const res = await fetch(`${API_BASE}/recruiter/${recruiterId}`, {
+        const res = await fetch(`${getApiBase()}/recruiter/${recruiterId}`, {
           method: 'DELETE',
         });
         if (!res.ok) return;

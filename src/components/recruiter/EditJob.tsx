@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { ArrowLeft, ChevronDown, X, Plus, Trash2 } from 'lucide-react';
 import neurohireLogo from '@/assets/neurohire-logo-2.png';
 import type { Job } from '../../App';
+import { getApiBase } from '@/lib/apiConfig';
 
 interface EditJobProps {
   job: Job;
@@ -9,10 +10,6 @@ interface EditJobProps {
   onBack: () => void;
   onLogout: () => void;
 }
-
-const API_BASE =
-  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
-  'http://127.0.0.1:8000';
 
 export function EditJob({ job, recruiterName, onBack, onLogout }: EditJobProps) {
   const [title, setTitle] = useState(job.title);
@@ -92,7 +89,7 @@ export function EditJob({ job, recruiterName, onBack, onLogout }: EditJobProps) 
       try {
         setLoading(true);
         setError(null);
-        const res = await fetch(`${API_BASE}/recruiter/jobs/${job.id}`);
+        const res = await fetch(`${getApiBase()}/recruiter/jobs/${job.id}`);
         if (!res.ok) {
           throw new Error(`Failed to load job: ${res.status}`);
         }
@@ -158,7 +155,7 @@ export function EditJob({ job, recruiterName, onBack, onLogout }: EditJobProps) 
         questions: validQuestions.length > 0 ? validQuestions : [''],
       };
       
-      const res = await fetch(`${API_BASE}/recruiter/jobs/${job.id}`, {
+      const res = await fetch(`${getApiBase()}/recruiter/jobs/${job.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

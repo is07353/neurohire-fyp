@@ -2,6 +2,7 @@ import { Language } from '../App';
 import { Video, Play, Square, Eye } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useUploadThing } from '../../lib/uploadthing';
+import { getApiBase } from '@/lib/apiConfig';
 
 interface VideoInterviewProps {
   language: Language;
@@ -40,10 +41,6 @@ const translations = {
 
 type RecordingState = 'idle' | 'recording' | 'recorded' | 'previewing';
 
-const API_BASE =
-  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
-  'http://127.0.0.1:8000';
-
 export function VideoInterview({ language, jobId, onComplete }: VideoInterviewProps) {
   const t = translations[language || 'english'];
   const [questions, setQuestions] = useState<string[]>([]);
@@ -61,7 +58,7 @@ export function VideoInterview({ language, jobId, onComplete }: VideoInterviewPr
     let cancelled = false;
     setQuestionsLoading(true);
     setQuestionsError(null);
-    fetch(`${API_BASE}/candidate/jobs/${encodeURIComponent(jobId)}/questions?lang=${langParam}`)
+    fetch(`${getApiBase()}/candidate/jobs/${encodeURIComponent(jobId)}/questions?lang=${langParam}`)
       .then((res) => {
         if (!res.ok) throw new Error(res.status === 404 ? 'No questions for this job' : 'Failed to load questions');
         return res.json();
@@ -253,7 +250,7 @@ export function VideoInterview({ language, jobId, onComplete }: VideoInterviewPr
         const key = (first as { key?: string } | undefined)?.key;
 
         if (url) {
-          await fetch(`${API_BASE}/candidate/video-url`, {
+          await fetch(`${getApiBase()}/candidate/video-url`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

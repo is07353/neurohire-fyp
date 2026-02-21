@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
+import { getApiBase } from '@/lib/apiConfig';
 
 interface RecruiterLoginProps {
   onLogin: (name: string, recruiterId?: number) => void;
@@ -7,10 +8,6 @@ interface RecruiterLoginProps {
   onSignUp?: () => void;
   title?: string;
 }
-
-const API_BASE =
-  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
-  'http://127.0.0.1:8000';
 
 export function RecruiterLogin({ onLogin, onBack, onSignUp, title = 'Recruiter Login' }: RecruiterLoginProps) {
   const [email, setEmail] = useState('');
@@ -30,7 +27,7 @@ export function RecruiterLogin({ onLogin, onBack, onSignUp, title = 'Recruiter L
     setLoginError(null);
     setLoggingIn(true);
     try {
-      const res = await fetch(`${API_BASE}/recruiter/login`, {
+      const res = await fetch(`${getApiBase()}/recruiter/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),

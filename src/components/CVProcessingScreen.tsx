@@ -1,9 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { Language } from '../App';
-
-const API_BASE =
-  (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ??
-  'http://127.0.0.1:8000';
+import { getApiBase } from '@/lib/apiConfig';
 
 interface CVProcessingScreenProps {
   language: Language;
@@ -48,7 +45,7 @@ export function CVProcessingScreen({ language, onComplete }: CVProcessingScreenP
         onCompleteRef.current();
         return;
       }
-      fetch(`${API_BASE}/candidate/analysis-status`)
+      fetch(`${getApiBase()}/candidate/analysis-status`)
         .then((res) => res.json())
         .then((data) => {
           if (completedRef.current) return;

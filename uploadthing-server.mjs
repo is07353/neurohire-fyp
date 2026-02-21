@@ -38,10 +38,23 @@ const app = express();
 // Simple sanity log so you can confirm the token is loaded
 console.log("[UploadThing Express] Using UPLOADTHING_TOKEN:", process.env.UPLOADTHING_TOKEN ? "loaded" : "MISSING");
 
-// Allow your Vite frontend to call this server
+// Allow Vite frontend (localhost and ngrok) to call this server
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  /^https:\/\/[a-z0-9-]+\.ngrok-free\.app$/,
+  /^https:\/\/[a-z0-9-]+\.ngrok-free\.dev$/,
+  /^https:\/\/[a-z0-9-]+\.ngrok\.io$/,
+];
 app.use(
   cors({
-    origin: "http://localhost:3000",
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true);
+      const ok = allowedOrigins.some((o) =>
+        typeof o === "string" ? o === origin : o.test(origin)
+      );
+      return cb(null, ok ? origin : false);
+    },
     credentials: true,
   }),
 );
