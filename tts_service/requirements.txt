@@ -1,0 +1,10 @@
+# TTS Service - run from tts_service folder:
+#   pip install -r requirements.txt
+#   python -m uvicorn tts_server:app --reload --port 8001
+#
+# Models (facebook/mms-tts-eng, facebook/mms-tts-urd-script_devanagari) auto-download on first run.
+torch
+transformers
+soundfile
+fastapi
+uvicorn

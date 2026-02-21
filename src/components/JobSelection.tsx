@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { Job } from '../App';
 import { MapPin, Search, ChevronDown, ChevronUp } from 'lucide-react';
 import { getApiBase } from '@/lib/apiConfig';
+import { useTts } from '@/components/candidate/tts/useTts';
 
 type Language = 'english' | 'urdu' | null;
 
@@ -10,6 +11,7 @@ interface JobSelectionProps {
   selectedJob: Job | null;
   onJobSelect: (job: Job) => void;
   onContinue: () => void;
+  audioGuidanceEnabled?: boolean;
 }
 
 interface ExtendedJob extends Job {
@@ -84,15 +86,24 @@ const translations = {
   },
 };
 
-export function JobSelection({ language, selectedJob, onJobSelect, onContinue }: JobSelectionProps) {
+export function JobSelection({ language, selectedJob, onJobSelect, onContinue, audioGuidanceEnabled = false }: JobSelectionProps) {
   const t = translations[language || 'english'];
+  const { speak } = useTts(language);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
   const [jobs, setJobs] = useState<ExtendedJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const didSpeakTitleRef = useRef(false);
 
   const langParam = language === 'urdu' ? 'ur' : 'en';
+
+  // Read "Select a Job Position" (or Urdu title) when Audio Guidance is on and page loads
+  useEffect(() => {
+    if (!audioGuidanceEnabled || !language || didSpeakTitleRef.current) return;
+    didSpeakTitleRef.current = true;
+    speak(t.title);
+  }, [audioGuidanceEnabled, language, t.title, speak]);
 
   useEffect(() => {
     let cancelled = false;

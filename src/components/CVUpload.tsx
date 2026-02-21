@@ -1,41 +1,51 @@
 import { Language } from '../App';
 import { Upload, FileText, CheckCircle } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { useUploadThing } from '../../lib/uploadthing';
 import { getApiBase } from '@/lib/apiConfig';
+import { useTts } from '@/components/candidate/tts/useTts';
 
 interface CVUploadProps {
   language: Language;
   cvFile: File | null;
   onCVUpload: (file: File) => void;
   onContinue: () => void;
+  audioGuidanceEnabled?: boolean;
 }
 
 const translations = {
   english: {
-    title: 'Upload Your CV',
-    dragDrop: 'Drag and drop your CV here',
+    title: 'Upload Your Resume',
+    dragDrop: 'Drag and drop your resume here',
     or: 'or',
-    uploadButton: 'Upload CV',
+    uploadButton: 'Upload Resume',
     supportedFormats: 'PDF, JPG, or PNG supported',
-    uploadSuccess: 'CV uploaded successfully',
+    uploadSuccess: 'Resume uploaded successfully',
     continueButton: 'Continue',
   },
   urdu: {
-    title: 'اپنا سی وی اپ لوڈ کریں',
-    dragDrop: 'اپنا سی وی یہاں ڈراپ کریں',
+    title: 'اپنا ریزومے اپ لوڈ کریں',
+    dragDrop: 'اپنا ریزومے یہاں ڈراپ کریں',
     or: 'یا',
-    uploadButton: 'سی وی اپ لوڈ کریں',
+    uploadButton: 'ریزومے اپ لوڈ کریں',
     supportedFormats: 'PDF، JPG، یا PNG معاون ہیں',
-    uploadSuccess: 'سی وی کامیابی سے اپ لوڈ ہو گیا',
+    uploadSuccess: 'ریزومے کامیابی سے اپ لوڈ ہو گیا',
     continueButton: 'جاری رکھیں',
   },
 };
 
-export function CVUpload({ language, cvFile, onCVUpload, onContinue }: CVUploadProps) {
+export function CVUpload({ language, cvFile, onCVUpload, onContinue, audioGuidanceEnabled = false }: CVUploadProps) {
   const t = translations[language || 'english'];
+  const { speak } = useTts(language);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadComplete, setUploadComplete] = useState(false);
+  const didSpeakTitleRef = useRef(false);
+
+  useEffect(() => {
+    if (!audioGuidanceEnabled || !language || didSpeakTitleRef.current) return;
+    didSpeakTitleRef.current = true;
+    speak(t.title);
+  }, [audioGuidanceEnabled, language, t.title, speak]);
 
   const { startUpload, isUploading } = useUploadThing('mediaUploader', {
     onClientUploadComplete: (res) => {

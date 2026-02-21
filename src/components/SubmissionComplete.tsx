@@ -1,28 +1,41 @@
 import { Language } from '../App';
 import { CheckCircle } from 'lucide-react';
+import { useEffect, useRef } from 'react';
+import { useTts } from '@/components/candidate/tts/useTts';
 
 interface SubmissionCompleteProps {
   language: Language;
   onFinish: () => void;
+  audioGuidanceEnabled?: boolean;
 }
 
 const translations = {
   english: {
     title: 'Thank You',
+    thankYouPhrase: 'Thank you for taking this interview.',
     message:
       'Your application has been successfully submitted. Our team will review your information and contact you if shortlisted.',
     finishButton: 'Finish',
   },
   urdu: {
     title: 'شکریہ',
+    thankYouPhrase: 'اس انٹرویو میں حصہ لینے کا شکریہ۔',
     message:
       'آپ کی درخواست کامیابی سے جمع ہو گئی ہے۔ ہماری ٹیم آپ کی معلومات کا جائزہ لے گی اور منتخب ہونے کی صورت میں آپ سے رابطہ کرے گی۔',
     finishButton: 'ختم کریں',
   },
 };
 
-export function SubmissionComplete({ language, onFinish }: SubmissionCompleteProps) {
+export function SubmissionComplete({ language, onFinish, audioGuidanceEnabled = false }: SubmissionCompleteProps) {
   const t = translations[language || 'english'];
+  const { speak } = useTts(language);
+  const didSpeakRef = useRef(false);
+
+  useEffect(() => {
+    if (!audioGuidanceEnabled || !language || didSpeakRef.current) return;
+    didSpeakRef.current = true;
+    speak(t.thankYouPhrase);
+  }, [audioGuidanceEnabled, language, t.thankYouPhrase, speak]);
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[70vh] text-center">

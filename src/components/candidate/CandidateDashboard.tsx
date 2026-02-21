@@ -33,6 +33,7 @@ interface CandidateDashboardProps {
 export function CandidateDashboard({ onBackToLanding }: CandidateDashboardProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [language, setLanguage] = useState<Language>(null);
+  const [audioGuidanceEnabled, setAudioGuidanceEnabled] = useState(false);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [cvFile, setCvFile] = useState<File | null>(null);
   const [isProcessingCV, setIsProcessingCV] = useState(false);
@@ -183,6 +184,8 @@ export function CandidateDashboard({ onBackToLanding }: CandidateDashboardProps)
               language={language}
               onLanguageSelect={handleLanguageSelect}
               onContinue={handleLanguageContinue}
+              audioGuidanceEnabled={audioGuidanceEnabled}
+              onAudioGuidanceChange={setAudioGuidanceEnabled}
             />
           )}
           
@@ -192,6 +195,7 @@ export function CandidateDashboard({ onBackToLanding }: CandidateDashboardProps)
               selectedJob={selectedJob}
               onJobSelect={handleJobSelect}
               onContinue={handleJobContinue}
+              audioGuidanceEnabled={audioGuidanceEnabled}
             />
           )}
           
@@ -201,6 +205,7 @@ export function CandidateDashboard({ onBackToLanding }: CandidateDashboardProps)
               cvFile={cvFile}
               onCVUpload={handleCVUpload}
               onContinue={handleCVContinue}
+              audioGuidanceEnabled={audioGuidanceEnabled}
             />
           )}
           
@@ -211,6 +216,7 @@ export function CandidateDashboard({ onBackToLanding }: CandidateDashboardProps)
               onInfoUpdate={handleInfoUpdate}
               onReupload={handleReuploadCV}
               onContinue={handleInfoContinue}
+              audioGuidanceEnabled={audioGuidanceEnabled}
             />
           )}
           
@@ -219,6 +225,7 @@ export function CandidateDashboard({ onBackToLanding }: CandidateDashboardProps)
               language={language}
               jobId={selectedJob?.id ?? null}
               onComplete={handleVideoComplete}
+              audioGuidanceEnabled={audioGuidanceEnabled}
             />
           )}
           
@@ -226,6 +233,7 @@ export function CandidateDashboard({ onBackToLanding }: CandidateDashboardProps)
             <SubmissionComplete
               language={language}
               onFinish={handleFinish}
+              audioGuidanceEnabled={audioGuidanceEnabled}
             />
           )}
         </div>

@@ -105,6 +105,20 @@ Backend runs on:
 
 ---
 
+## TTS Service (Optional – Candidate Audio Guidance)
+
+For Text-to-Speech in the candidate flow (English and Urdu), run the TTS service from the `tts_service` folder:
+
+```bash
+cd tts_service
+pip install -r requirements.txt
+python -m uvicorn tts_server:app --reload --port 8001
+```
+
+TTS runs on **http://127.0.0.1:8001**. The frontend proxies `/tts` to this port when using the dev server. Models auto-download on first run.
+
+---
+
 ## ✅ Verify Database Connection
 
 With the backend running, open:
@@ -179,13 +193,21 @@ npx prisma studio
    python -m uvicorn main:app --reload --port 8000
    ```
 
-2. **Start UploadThing** (if required, from project root):
+2. **Start TTS service** (optional, for candidate audio guidance; from `tts_service/`):
+
+   ```bash
+   cd tts_service
+   pip install -r requirements.txt
+   python -m uvicorn tts_server:app --reload --port 8001
+   ```
+
+3. **Start UploadThing** (if required, from project root):
 
    ```bash
    npm run uploadthing-server
    ```
 
-3. **Start frontend** (from project root):
+4. **Start frontend** (from project root):
 
    ```bash
    npm run dev

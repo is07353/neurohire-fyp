@@ -1,7 +1,8 @@
 import { Language, CandidateInfo } from '../App';
 import { User, Phone, Mail, MapPin } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { getApiBase } from '@/lib/apiConfig';
+import { useTts } from '@/components/candidate/tts/useTts';
 
 interface ReviewInformationProps {
   language: Language;
@@ -9,6 +10,7 @@ interface ReviewInformationProps {
   onInfoUpdate: (info: CandidateInfo) => void;
   onReupload: () => void;
   onContinue: () => void;
+  audioGuidanceEnabled?: boolean;
 }
 
 const translations = {
@@ -40,8 +42,17 @@ export function ReviewInformation({
   onInfoUpdate,
   onReupload,
   onContinue,
+  audioGuidanceEnabled = false,
 }: ReviewInformationProps) {
   const t = translations[language || 'english'];
+  const { speak } = useTts(language);
+  const didSpeakTitleRef = useRef(false);
+
+  useEffect(() => {
+    if (!audioGuidanceEnabled || !language || didSpeakTitleRef.current) return;
+    didSpeakTitleRef.current = true;
+    speak(t.title);
+  }, [audioGuidanceEnabled, language, t.title, speak]);
 
   // ✅ DO NOT initialize from candidateInfo
   const [info, setInfo] = useState<CandidateInfo>({

@@ -1,4 +1,3 @@
-
   import { defineConfig } from 'vite';
   import react from '@vitejs/plugin-react-swc';
   import path from 'path';
@@ -67,6 +66,11 @@
           target: 'http://localhost:4000',
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/uploadthing/, '/api/uploadthing'),
+        },
+        '/tts': {
+          target: 'http://127.0.0.1:8001',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/tts/, ''),
         },
       },
     },

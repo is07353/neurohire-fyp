@@ -1,13 +1,15 @@
 import { Language } from '../App';
-import { Video, Play, Square, Eye } from 'lucide-react';
+import { Video, Play, Square, Eye, Volume2 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useUploadThing } from '../../lib/uploadthing';
 import { getApiBase } from '@/lib/apiConfig';
+import { useTts } from '@/components/candidate/tts/useTts';
 
 interface VideoInterviewProps {
   language: Language;
   jobId: string | null;
   onComplete: () => void;
+  audioGuidanceEnabled?: boolean;
 }
 
 const translations = {
@@ -41,8 +43,9 @@ const translations = {
 
 type RecordingState = 'idle' | 'recording' | 'recorded' | 'previewing';
 
-export function VideoInterview({ language, jobId, onComplete }: VideoInterviewProps) {
+export function VideoInterview({ language, jobId, onComplete, audioGuidanceEnabled = false }: VideoInterviewProps) {
   const t = translations[language || 'english'];
+  const { speak, stop } = useTts(language);
   const [questions, setQuestions] = useState<string[]>([]);
   const [questionsLoading, setQuestionsLoading] = useState(true);
   const [questionsError, setQuestionsError] = useState<string | null>(null);
@@ -292,6 +295,19 @@ export function VideoInterview({ language, jobId, onComplete }: VideoInterviewPr
   const currentQuestion = questions[currentQuestionIndex];
   const isLastQuestion = currentQuestionIndex === questions.length - 1;
 
+  // Auto-read question when audio guidance is enabled (on page load and when question changes)
+  const didAutoReadRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!audioGuidanceEnabled || !currentQuestion) return;
+    const key = `${currentQuestionIndex}:${currentQuestion}`;
+    if (didAutoReadRef.current === key) return;
+    didAutoReadRef.current = key;
+    speak(currentQuestion);
+    return () => {
+      stop();
+    };
+  }, [audioGuidanceEnabled, currentQuestion, currentQuestionIndex, speak, stop]);
+
   if (questionsLoading) {
     return (
       <div className="py-8 text-center">
@@ -331,10 +347,21 @@ export function VideoInterview({ language, jobId, onComplete }: VideoInterviewPr
       </div>
       
       <div className="mb-8">
-        <div className="bg-[#f5f5f5] border-4 border-[#000000] rounded-lg p-8">
-          <p className="text-2xl text-[#000000] text-center leading-relaxed">
+        <div className="bg-[#f5f5f5] border-4 border-[#000000] rounded-lg p-8 flex items-center justify-center gap-3">
+          <p className="text-2xl text-[#000000] text-center leading-relaxed flex-1">
             {currentQuestion}
           </p>
+          {audioGuidanceEnabled && (
+            <button
+              type="button"
+              onClick={() => speak(currentQuestion)}
+              className="shrink-0 p-2 rounded-full hover:bg-black/10 text-[#000000] transition-colors"
+              title={language === 'urdu' ? 'سوال سنیں' : 'Listen to question'}
+              aria-label={language === 'urdu' ? 'سوال سنیں' : 'Listen to question'}
+            >
+              <Volume2 className="w-6 h-6" />
+            </button>
+          )}
         </div>
         <p className="text-lg text-gray-600 text-center mt-4">
           {t.instruction}
