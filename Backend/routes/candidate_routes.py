@@ -429,16 +429,31 @@ async def _analyze_video_and_update_db(
         )
         return
 
-    # Get job title / role for this application (may be used by the model as "role").
+    # Get job_description from jobs table; pass as role input (JSON to string, truncated for pipeline).
+    # Pipeline requires non-empty "role"; cap length to avoid 422.
+    ROLE_MAX_LENGTH = 2000
     role = ""
     try:
         app_row = await application_repo.get_application_by_id(pool, application_id)
         if app_row:
             job_row = await job_repo.get_job_by_id(pool, app_row["job_id"])
             if job_row:
-                role = job_row.get("title") or job_row.get("job_title") or ""
+                job_desc = job_row.get("job_description")
+                if isinstance(job_desc, dict):
+                    role = json.dumps(job_desc)
+                elif isinstance(job_desc, str):
+                    role = job_desc.strip()
+                elif job_desc is not None:
+                    role = str(job_desc)
+                if len(role) > ROLE_MAX_LENGTH:
+                    role = role[:ROLE_MAX_LENGTH]
+                # Fallback so role is never empty (pipeline returns 422 if role is missing)
+                if not role.strip():
+                    role = job_row.get("job_title") or job_row.get("title") or "General"
     except Exception as e:
-        print(f"[video_analysis] Failed to fetch job role for application_id={application_id}: {e}")
+        print(f"[video_analysis] Failed to fetch job description for application_id={application_id}: {e}")
+    if not role.strip():
+        role = "General"
 
     analysis_raw = run_video_full_pipeline(path, role=role, question=question_text)
     print(

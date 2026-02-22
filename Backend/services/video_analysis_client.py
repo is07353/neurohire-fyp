@@ -205,13 +205,18 @@ def run_video_full_pipeline(
         print("[video_analysis] Attempt {}/{} ...".format(attempt + 1, VIDEO_MAX_RETRIES))
         try:
             with open(video_path, "rb") as f:
-                # Let server infer type; name is enough for multipart
-                files = {"video": (video_path.name, f)}
-                data = {"role": role or "", "question": question or ""}
+                # Send role and question as explicit multipart form fields so the server receives them.
+                # Using files=dict can cause some servers to not see data= fields; use list of tuples.
+                role_str = (role or "").strip() or " "
+                question_str = (question or "").strip() or " "
+                multipart = [
+                    ("video", (video_path.name, f, "application/octet-stream")),
+                    ("role", (None, role_str)),
+                    ("question", (None, question_str)),
+                ]
                 resp = requests.post(
                     url,
-                    files=files,
-                    data=data,
+                    files=multipart,
                     timeout=VIDEO_REQUEST_TIMEOUT,
                 )
             print("[video_analysis] Response status:", resp.status_code)
