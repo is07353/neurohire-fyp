@@ -69,8 +69,11 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="TTS Service", lifespan=lifespan)
+
+# Allow frontend when opened via localhost or ngrok (Vite proxies /tts to this server)
 app.add_middleware(
     CORSMiddleware,
+    allow_origin_regex=r"^https://[a-z0-9-]+\.ngrok-free\.(app|dev)$|^https://[a-z0-9-]+\.ngrok\.io$",
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
@@ -115,10 +118,13 @@ def _generate_wav(text: str, language: str) -> bytes:
 
     out = pipe(text)
 
-    # Pipeline may return a single dict, a list of dicts, or a raw array (avoid "truth value of array" error)
+    # Pipeline may return a single dict, a list of dicts, a tuple (audio, sample_rate), or a raw array
     if isinstance(out, list) and len(out) > 0:
         out = out[0]
-    if isinstance(out, dict):
+    if isinstance(out, tuple) and len(out) >= 2:
+        audio, sampling_rate = out[0], out[1]
+        sampling_rate = int(sampling_rate) if sampling_rate is not None else 16000
+    elif isinstance(out, dict):
         audio = out.get("audio")
         if audio is None:
             audio = out.get("waveform")
@@ -137,6 +143,8 @@ def _generate_wav(text: str, language: str) -> bytes:
             "sampling_rate",
             16000,
         ) or 16000
+
+    sampling_rate = int(sampling_rate) if sampling_rate is not None else 16000
 
     # Convert to numpy if needed (torch tensor or list)
     if hasattr(audio, "cpu"):
@@ -188,10 +196,16 @@ def candidate_speak(body: SpeakRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except (ValueError, RuntimeError) as e:
         logger.exception("TTS error: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="TTS generation failed. Check server logs.")
+    except (OSError, ImportError) as e:
+        logger.exception("TTS not ready (model/import): %s", e)
+        raise HTTPException(
+            status_code=503,
+            detail="TTS service is still loading models. Try again in a moment.",
+        )
     except Exception as e:
         logger.exception("TTS unexpected error: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="TTS failed. Check server logs.")
 
     return StreamingResponse(
         io.BytesIO(wav_bytes),
